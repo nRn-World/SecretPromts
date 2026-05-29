@@ -425,10 +425,28 @@ export const AdminDashboardInner: React.FC<{
               ) : (
                 users.filter(u => u.warnings && u.warnings.length > 0).map(u => (
                   <div key={u.uid} className="rounded-2xl border border-zinc-800 bg-zinc-800/30 p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      <span className="font-bold text-white text-sm">{u.displayName}</span>
-                      <span className="text-xs text-zinc-500">({u.warnings?.length} varningar)</span>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                        <button
+                          type="button"
+                          onClick={() => handleViewProfile(u.uid)}
+                          className="truncate text-left text-sm font-bold text-white transition hover:text-purple-300"
+                          title={t('adminViewProfile')}
+                        >
+                          {u.displayName}
+                        </button>
+                        <span className="shrink-0 text-xs text-zinc-500">({u.warnings?.length} varningar)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleViewProfile(u.uid)}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-300 transition hover:bg-zinc-600 hover:text-purple-300"
+                        title={t('adminViewProfile')}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        {t('adminViewProfile')}
+                      </button>
                     </div>
                     <div className="space-y-3">
                       {u.warnings?.map(w => (
