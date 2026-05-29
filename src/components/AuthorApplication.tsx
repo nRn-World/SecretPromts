@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, Link, Mail, Send, Sparkles, User, X } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
+import { submitApplication } from '../firebase/firestore';
 
 type ApplicationStatus = 'idle' | 'sending' | 'success' | 'error';
 
@@ -8,8 +10,9 @@ const APPLICATION_EMAIL = 'bynrnworld@gmail.com';
 
 export const AuthorApplication: React.FC = () => {
   const { t } = useLanguage();
-  const [displayName, setDisplayName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
+  const { user, isGuest } = useAuth();
+  const [displayName, setDisplayName] = useState(user.displayName !== 'Guest' ? user.displayName : '');
+  const [contactEmail, setContactEmail] = useState(user.email || '');
   const [portfolioUrl, setPortfolioUrl] = useState('');
   const [experience, setExperience] = useState('');
   const [motivation, setMotivation] = useState('');
@@ -17,28 +20,7 @@ export const AuthorApplication: React.FC = () => {
   const [message, setMessage] = useState('');
   const [isDismissed, setIsDismissed] = useState(false);
 
-  const buildMailtoLink = () => {
-    const subject = `SecretPrompts Author Application - ${displayName || 'New applicant'}`;
-    const body = [
-      'SecretPrompts Author Application',
-      '',
-      `Display Name: ${displayName}`,
-      `Contact Email: ${contactEmail}`,
-      `Portfolio URL: ${portfolioUrl || 'Not provided'}`,
-      '',
-      'Experience with AI Prompts:',
-      experience,
-      '',
-      'Why do you want to become an author?',
-      motivation
-    ].join('\n');
-
-    return `mailto:${APPLICATION_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-
   const resetForm = () => {
-    setDisplayName('');
-    setContactEmail('');
     setPortfolioUrl('');
     setExperience('');
     setMotivation('');
@@ -56,42 +38,24 @@ export const AuthorApplication: React.FC = () => {
     setStatus('sending');
     setMessage('');
 
-    const payload = {
-      _subject: `SecretPrompts Author Application: ${displayName}`,
-      _template: 'table',
-      _captcha: 'false',
-      'Application Type': 'Become an Author',
-      'Display Name': displayName,
-      'Contact Email': contactEmail,
-      'Portfolio URL': portfolioUrl || 'Not provided',
-      'Experience with AI Prompts': experience,
-      'Why become an author': motivation
-    };
-
     try {
-      const response = await fetch(`https://formsubmit.co/ajax/${APPLICATION_EMAIL}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
-        },
-        body: JSON.stringify(payload)
+      await submitApplication({
+        uid: isGuest ? undefined : user.id,
+        displayName: displayName.trim(),
+        contactEmail: contactEmail.trim(),
+        portfolioUrl: portfolioUrl.trim(),
+        experience: experience.trim(),
+        motivation: motivation.trim(),
+        status: 'pending',
       });
 
-      const result = await response.json().catch(() => null) as { success?: string; message?: string } | null;
-
-      if (!response.ok || result?.success === 'false') {
-        throw new Error(result?.message || 'FormSubmit could not receive the application.');
-      }
-
       setStatus('success');
-      setMessage(t('authorSuccess', { email: APPLICATION_EMAIL }));
+      setMessage('Ansökan skickad! Admin kommer att granska den.');
       resetForm();
     } catch (error) {
       console.error('Author application failed', error);
       setStatus('error');
-      setMessage(t('authorAutoError'));
-      window.location.href = buildMailtoLink();
+      setMessage('Något gick fel. Försök igen senare.');
     }
   };
 

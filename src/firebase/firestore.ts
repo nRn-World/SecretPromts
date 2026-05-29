@@ -1,7 +1,7 @@
 import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, getDoc, writeBatch, setDoc,
-  arrayUnion, arrayRemove, increment, where, getDocs
+  arrayUnion, arrayRemove, increment, where, getDocs, serverTimestamp
 } from 'firebase/firestore';
 import app from './config';
 import type { PromptItem } from '../data/initialPrompts';
@@ -13,12 +13,14 @@ const CATEGORIES_DOC = 'config/categories';
 const ADMIN_DOC = 'config/admin';
 const SEEDED_DOC = 'config/seeded';
 const USERS_COL = 'users';
+const APPLICATIONS_COL = 'applications';
+const BLOCKED_COL = 'blocked';
 
-// ─── User Profile ─────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface UserNotification {
   id: string;
-  type: 'like' | 'friend_request_accepted';
+  type: 'like' | 'friend_request_accepted' | 'warning' | 'warning_response' | 'author_granted';
   fromUid?: string;
   fromName: string;
   promptTitle?: string;
@@ -26,17 +28,44 @@ export interface UserNotification {
   read: boolean;
 }
 
+export interface Warning {
+  id: string;
+  message: string;
+  createdAt: string;
+  response?: string;
+  respondedAt?: string;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
   photoURL?: string;
   bio?: string;
-  friends: string[];       // uids of friends
-  friendRequests: string[]; // uids who sent requests
-  favoriteUsers: string[]; // uids marked as favourite
+  friends: string[];
+  friendRequests: string[];
+  favoriteUsers: string[];
   createdCategories: string[];
   notifications?: UserNotification[];
+  isAuthor?: boolean;
+  authorExpiresAt?: string | null;
+  isBlocked?: boolean;
+  warnings?: Warning[];
   createdAt: string;
+}
+
+export interface AuthorApplication {
+  id?: string;
+  uid?: string;
+  displayName: string;
+  contactEmail: string;
+  portfolioUrl: string;
+  experience: string;
+  motivation: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  authorPeriod?: '1month' | '5months' | '1year' | 'forever';
+  adminNote?: string;
+  createdAt: string;
+  reviewedAt?: string | null;
 }
 
 export const ensureUserProfile = async (uid: string, displayName: string, photoURL?: string) => {
@@ -53,12 +82,15 @@ export const ensureUserProfile = async (uid: string, displayName: string, photoU
       favoriteUsers: [],
       createdCategories: [],
       notifications: [],
+      isAuthor: false,
+      authorExpiresAt: null,
+      isBlocked: false,
+      warnings: [],
       createdAt: new Date().toISOString(),
     };
     await setDoc(ref, profile);
     return profile;
   }
-  // Update displayName / photo if changed
   const data = snap.data() as UserProfile;
   const updates: Partial<UserProfile> = {};
   if (displayName && data.displayName !== displayName) updates.displayName = displayName;
@@ -268,6 +300,146 @@ export const toggleLike = async (
     console.error('Firestore toggleLike error:', e.code, e.message);
     return false;
   }
+};
+
+// ─── Applications ──────────────────────────────────────────────────────────────
+
+export const submitApplication = async (data: Omit<AuthorApplication, 'id' | 'createdAt'>) => {
+  const ref = await addDoc(collection(db, APPLICATIONS_COL), {
+    ...data,
+    createdAt: new Date().toISOString(),
+    reviewedAt: null,
+  });
+  return ref.id;
+};
+
+export const subscribeApplications = (cb: (apps: AuthorApplication[]) => void) =>
+  onSnapshot(
+    query(collection(db, APPLICATIONS_COL), orderBy('createdAt', 'desc')),
+    (snap) => {
+      cb(snap.docs.map(d => ({ ...d.data(), id: d.id } as AuthorApplication)));
+    }
+  );
+
+export const updateApplicationStatus = async (
+  id: string,
+  status: 'accepted' | 'rejected',
+  uid: string | undefined,
+  period?: '1month' | '5months' | '1year' | 'forever',
+  adminNote?: string
+) => {
+  const updates: Record<string, any> = {
+    status,
+    reviewedAt: new Date().toISOString(),
+  };
+  if (period) updates.authorPeriod = period;
+  if (adminNote) updates.adminNote = adminNote;
+  await updateDoc(doc(db, APPLICATIONS_COL, id), updates);
+
+  // If accepted, update the user's profile
+  if (status === 'accepted' && uid) {
+    let expiresAt: string | null = null;
+    if (period && period !== 'forever') {
+      const now = new Date();
+      switch (period) {
+        case '1month': now.setMonth(now.getMonth() + 1); break;
+        case '5months': now.setMonth(now.getMonth() + 5); break;
+        case '1year': now.setFullYear(now.getFullYear() + 1); break;
+      }
+      expiresAt = now.toISOString();
+    }
+    await updateDoc(doc(db, USERS_COL, uid), {
+      isAuthor: true,
+      authorExpiresAt: expiresAt,
+      notifications: arrayUnion({
+        id: Math.random().toString(36).substr(2, 9),
+        type: 'author_granted' as const,
+        fromName: 'Admin',
+        createdAt: new Date().toISOString(),
+        read: false,
+      }),
+    });
+  }
+};
+
+// ─── Blocked Users ────────────────────────────────────────────────────────────
+
+export const blockUser = async (email: string, reason?: string) => {
+  await setDoc(doc(db, BLOCKED_COL, email), {
+    email,
+    reason: reason || '',
+    blockedAt: new Date().toISOString(),
+  });
+  // Also mark the user's profile as blocked if they have one
+  const q = query(collection(db, USERS_COL), where('email', '==', email));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    await updateDoc(doc(db, USERS_COL, d.id), { isBlocked: true });
+  }
+};
+
+export const unblockUser = async (email: string) => {
+  await deleteDoc(doc(db, BLOCKED_COL, email));
+  const q = query(collection(db, USERS_COL), where('email', '==', email));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    await updateDoc(doc(db, USERS_COL, d.id), { isBlocked: false });
+  }
+};
+
+export const isEmailBlocked = async (email: string): Promise<boolean> => {
+  const snap = await getDoc(doc(db, BLOCKED_COL, email));
+  return snap.exists();
+};
+
+export const subscribeBlockedEmails = (cb: (list: any[]) => void) =>
+  onSnapshot(query(collection(db, BLOCKED_COL), orderBy('blockedAt', 'desc')), (snap) => {
+    cb(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+  });
+
+export const subscribeAllUsers = (cb: (users: UserProfile[]) => void) =>
+  onSnapshot(query(collection(db, USERS_COL), orderBy('createdAt', 'desc')), (snap) => {
+    cb(snap.docs.map(d => ({ ...d.data() } as UserProfile)));
+  });
+
+// ─── Warnings ──────────────────────────────────────────────────────────────────
+
+export const sendWarning = async (uid: string, message: string) => {
+  const warning: Warning = {
+    id: Math.random().toString(36).substr(2, 9),
+    message,
+    createdAt: new Date().toISOString(),
+  };
+  await updateDoc(doc(db, USERS_COL, uid), {
+    warnings: arrayUnion(warning),
+    notifications: arrayUnion({
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'warning' as const,
+      fromName: 'Admin',
+      createdAt: new Date().toISOString(),
+      read: false,
+    }),
+  });
+};
+
+export const respondToWarning = async (uid: string, warningId: string, response: string) => {
+  const snap = await getDoc(doc(db, USERS_COL, uid));
+  const profile = snap.data() as UserProfile | undefined;
+  if (!profile?.warnings) return;
+  const updatedWarnings = profile.warnings.map(w =>
+    w.id === warningId ? { ...w, response, respondedAt: new Date().toISOString() } : w
+  );
+  await updateDoc(doc(db, USERS_COL, uid), { warnings: updatedWarnings });
+  // Notify admin
+  await updateDoc(doc(db, USERS_COL, uid), {
+    notifications: arrayUnion({
+      id: Math.random().toString(36).substr(2, 9),
+      type: 'warning_response' as const,
+      fromName: profile.displayName,
+      createdAt: new Date().toISOString(),
+      read: false,
+    }),
+  });
 };
 
 // ─── Admin ────────────────────────────────────────────────────────────────────

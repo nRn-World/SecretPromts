@@ -1,0 +1,359 @@
+import React, { useEffect, useState } from 'react';
+import {
+  X, Check, XCircle, Clock, Shield, UserX, UserCheck, AlertTriangle,
+  Send, Mail, Search, MessageSquare, Ban, Crown
+} from 'lucide-react';
+import {
+  subscribeApplications, updateApplicationStatus, subscribeAllUsers,
+  blockUser, unblockUser, subscribeBlockedEmails, sendWarning,
+  type AuthorApplication, type UserProfile
+} from '../firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+
+type Tab = 'applications' | 'users' | 'blocked' | 'warnings';
+
+const PERIODS = [
+  { value: '1month', label: '1 månad' },
+  { value: '5months', label: '5 månader' },
+  { value: '1year', label: '1 år' },
+  { value: 'forever', label: 'Tillsvidare' },
+] as const;
+
+const getPeriodEnd = (period: string): string | null => {
+  if (period === 'forever') return null;
+  const now = new Date();
+  switch (period) {
+    case '1month': now.setMonth(now.getMonth() + 1); break;
+    case '5months': now.setMonth(now.getMonth() + 5); break;
+    case '1year': now.setFullYear(now.getFullYear() + 1); break;
+  }
+  return now.toISOString().split('T')[0];
+};
+
+export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>('applications');
+  const [applications, setApplications] = useState<AuthorApplication[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [blockedEmails, setBlockedEmails] = useState<any[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Warning modal state
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [warningTarget, setWarningTarget] = useState<UserProfile | null>(null);
+  const [warningMessage, setWarningMessage] = useState('');
+
+  useEffect(() => {
+    const unsubApps = subscribeApplications(setApplications);
+    const unsubUsers = subscribeAllUsers(setUsers);
+    const unsubBlocked = subscribeBlockedEmails(setBlockedEmails);
+    return () => { unsubApps(); unsubUsers(); unsubBlocked(); };
+  }, []);
+
+  const handleAccept = async (app: AuthorApplication, period: '1month' | '5months' | '1year' | 'forever') => {
+    if (!app.id) return;
+    setActionLoading(app.id);
+    await updateApplicationStatus(app.id, 'accepted', app.uid, period);
+    setActionLoading(null);
+  };
+
+  const handleReject = async (app: AuthorApplication) => {
+    if (!app.id) return;
+    setActionLoading(app.id);
+    await updateApplicationStatus(app.id, 'rejected', app.uid);
+    setActionLoading(null);
+  };
+
+  const handleBlock = async (email: string) => {
+    await blockUser(email);
+  };
+
+  const handleUnblock = async (email: string) => {
+    await unblockUser(email);
+  };
+
+  const handleSendWarning = async () => {
+    if (!warningTarget || !warningMessage.trim()) return;
+    await sendWarning(warningTarget.uid, warningMessage.trim());
+    setShowWarningModal(false);
+    setWarningTarget(null);
+    setWarningMessage('');
+  };
+
+  const pendingApps = applications.filter(a => a.status === 'pending');
+
+  return (
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-zinc-950/95 backdrop-blur-2xl flex items-start justify-center p-3 sm:p-6 pt-16 animate-fade-in" onClick={onClose}>
+      <div className="relative w-full max-w-5xl bg-zinc-900 rounded-3xl border border-zinc-800 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-amber-400" />
+            <h2 className="text-lg font-black text-white">Admin Panel</h2>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800 px-6 overflow-x-auto scrollbar-hide">
+          {([
+            { key: 'applications', label: 'Ansökningar', icon: Crown, count: pendingApps.length },
+            { key: 'users', label: 'Användare', icon: UserCheck, count: 0 },
+            { key: 'blocked', label: 'Blockerade', icon: Ban, count: blockedEmails.length },
+            { key: 'warnings', label: 'Varningar', icon: AlertTriangle, count: 0 },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as Tab)}
+              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 transition-all -mb-px shrink-0 ${
+                activeTab === tab.key ? 'border-amber-400 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+              {tab.count > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-400">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6 max-h-[70vh] overflow-y-auto">
+          {activeTab === 'applications' && (
+            <div className="space-y-4">
+              {applications.length === 0 ? (
+                <p className="text-center text-zinc-500 py-8">Inga ansökningar ännu</p>
+              ) : (
+                applications.map(app => (
+                  <div key={app.id} className={`rounded-2xl border p-5 ${
+                    app.status === 'pending' ? 'border-amber-500/30 bg-amber-500/5' :
+                    app.status === 'accepted' ? 'border-emerald-500/30 bg-emerald-500/5' :
+                    'border-red-500/30 bg-red-500/5'
+                  }`}>
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-white">{app.displayName}</h3>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            app.status === 'pending' ? 'bg-amber-500/20 text-amber-400' :
+                            app.status === 'accepted' ? 'bg-emerald-500/20 text-emerald-400' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>
+                            {app.status === 'pending' ? 'Väntar' : app.status === 'accepted' ? 'Godkänd' : 'Nekad'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-zinc-400">
+                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{app.contactEmail}</span>
+                          {app.portfolioUrl && <span>{app.portfolioUrl}</span>}
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{app.createdAt?.split('T')[0]}</span>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <div>
+                            <p className="text-[11px] font-bold text-zinc-500 uppercase">Erfarenhet</p>
+                            <p className="text-sm text-zinc-300 mt-0.5">{app.experience}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold text-zinc-500 uppercase">Motivation</p>
+                            <p className="text-sm text-zinc-300 mt-0.5">{app.motivation}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {app.status === 'pending' && (
+                        <div className="shrink-0 w-full sm:w-auto">
+                          <p className="text-xs font-bold text-zinc-400 mb-2">Godkänn med period:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {PERIODS.map(p => (
+                              <button
+                                key={p.value}
+                                onClick={() => handleAccept(app, p.value)}
+                                disabled={actionLoading === app.id}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition disabled:opacity-50"
+                              >
+                                <Check className="w-3 h-3" />
+                                {p.label}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => handleReject(app)}
+                              disabled={actionLoading === app.id}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-bold transition disabled:opacity-50"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              Neka
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Sök användare..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-white focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+              <div className="space-y-3">
+                {users
+                  .filter(u => u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || u.uid?.includes(searchQuery))
+                  .map(u => (
+                    <div key={u.uid} className="flex items-center justify-between p-4 rounded-xl bg-zinc-800/50 border border-zinc-800">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                          {u.displayName?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-sm truncate">{u.displayName}</span>
+                            {u.isAuthor && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-zinc-500 mt-0.5">
+                            <span>{u.uid?.slice(0, 12)}...</span>
+                            {u.authorExpiresAt && (
+                              <span className="text-amber-400/70">Utgår: {u.authorExpiresAt.split('T')[0]}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => { setWarningTarget(u); setShowWarningModal(true); }}
+                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-amber-400 transition"
+                          title="Skicka varning"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleBlock(u.uid)}
+                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-red-400 transition"
+                          title="Blockera"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'blocked' && (
+            <div className="space-y-3">
+              {blockedEmails.length === 0 ? (
+                <p className="text-center text-zinc-500 py-8">Inga blockerade konton</p>
+              ) : (
+                blockedEmails.map(b => (
+                  <div key={b.id} className="flex items-center justify-between p-4 rounded-xl bg-red-500/5 border border-red-500/20">
+                    <div className="flex items-center gap-3">
+                      <Ban className="w-4 h-4 text-red-400" />
+                      <div>
+                        <span className="text-sm font-bold text-white">{b.email}</span>
+                        <p className="text-[11px] text-zinc-500">Blockerad: {b.blockedAt?.split('T')[0]}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleUnblock(b.email)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition"
+                    >
+                      <UserCheck className="w-3 h-3" />
+                      Avblockera
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'warnings' && (
+            <div className="space-y-4">
+              {users.filter(u => u.warnings && u.warnings.length > 0).length === 0 ? (
+                <p className="text-center text-zinc-500 py-8">Inga varningar skickade</p>
+              ) : (
+                users.filter(u => u.warnings && u.warnings.length > 0).map(u => (
+                  <div key={u.uid} className="rounded-2xl border border-zinc-800 bg-zinc-800/30 p-5">
+                    <div className="flex items-center gap-3 mb-4">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold text-white text-sm">{u.displayName}</span>
+                      <span className="text-xs text-zinc-500">({u.warnings?.length} varningar)</span>
+                    </div>
+                    <div className="space-y-3">
+                      {u.warnings?.map(w => (
+                        <div key={w.id} className="pl-4 border-l-2 border-amber-500/30">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm text-zinc-300">{w.message}</p>
+                            <span className="text-[10px] text-zinc-600 shrink-0">{w.createdAt.split('T')[0]}</span>
+                          </div>
+                          {w.response ? (
+                            <div className="mt-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                              <p className="text-[11px] font-bold text-emerald-400 uppercase">Svar från {u.displayName}</p>
+                              <p className="text-sm text-zinc-300 mt-1">{w.response}</p>
+                              <p className="text-[10px] text-zinc-600 mt-1">{w.respondedAt?.split('T')[0]}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-zinc-600 mt-1 italic">Inget svar ännu</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Warning Modal */}
+        {showWarningModal && warningTarget && (
+          <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowWarningModal(false)}>
+            <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-white">Skicka varning till {warningTarget.displayName}</h3>
+              </div>
+              <textarea
+                value={warningMessage}
+                onChange={e => setWarningMessage(e.target.value)}
+                placeholder="Skriv varningsmeddelande..."
+                rows={4}
+                className="w-full p-3 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-white focus:outline-none focus:border-zinc-500 resize-none"
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => { setShowWarningModal(false); setWarningMessage(''); }} className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition">Avbryt</button>
+                <button onClick={handleSendWarning} disabled={!warningMessage.trim()} className="flex items-center gap-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition disabled:opacity-50">
+                  <Send className="w-3 h-3" />
+                  Skicka varning
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const AdminDashboard: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  return isOpen ? <AdminDashboardInner onClose={() => setIsOpen(false)} /> : null;
+};
+
+export const useAdminDashboard = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const toggle = () => setIsOpen(!isOpen);
+  return { isOpen, toggle, AdminPanel: AdminDashboardInner };
+};

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn } from '../firebase/auth';
-import { getAdminEmail, setAdminEmail } from '../firebase/firestore';
+import { getAdminEmail, setAdminEmail, isEmailBlocked } from '../firebase/firestore';
 import type { User } from 'firebase/auth';
 
 interface AuthContextType {
@@ -74,6 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
+      const blocked = await isEmailBlocked(email);
+      if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
       const cred = await fbSignUp(email, password);
       if (cred.user) {
         setIsAuthModalOpen(false);
@@ -91,6 +93,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithEmail = async (email: string, password: string) => {
     try {
+      const blocked = await isEmailBlocked(email);
+      if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
       await fbSignIn(email, password);
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };

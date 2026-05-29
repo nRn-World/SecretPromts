@@ -1,11 +1,13 @@
-import React from 'react';
-import { Plus, Heart, FolderGit2, Sparkles, User, LogOut, Bell, UserPlus, ThumbsUp } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Heart, FolderGit2, Sparkles, User, LogOut, Bell, UserPlus, ThumbsUp, Shield, Crown, AlertTriangle } from 'lucide-react';
 import { usePrompts } from '../context/PromptContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { LanguageSelector } from './LanguageSelector';
 import logoImg from '../../logo/SP-no-bg.png';
 import { subscribeUserProfile, markNotificationsRead, type UserProfile } from '../firebase/firestore';
+import { AdminDashboardInner } from './AdminDashboard';
+import { WarningModal } from './WarningModal';
 
 
 export const Header: React.FC = () => {
@@ -19,6 +21,8 @@ export const Header: React.FC = () => {
     isAdmin,
     openUserProfile
   } = usePrompts();
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
 
   const customCount = prompts.filter(p => p.isCustom).length;
 
@@ -153,11 +157,27 @@ export const Header: React.FC = () => {
                         ))}
                         {[...(myProfile?.notifications || [])].reverse().map(n => (
                           <div key={n.id} className="p-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors flex gap-3 items-center">
-                            <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400 shrink-0">
-                              {n.type === 'like' ? <ThumbsUp className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                              n.type === 'like' ? 'bg-pink-500/20 text-pink-400' :
+                              n.type === 'warning' ? 'bg-amber-500/20 text-amber-400' :
+                              n.type === 'author_granted' ? 'bg-emerald-500/20 text-emerald-400' :
+                              'bg-purple-500/20 text-purple-400'
+                            }`}>
+                              {n.type === 'like' ? <ThumbsUp className="w-4 h-4" /> :
+                               n.type === 'warning' ? <AlertTriangle className="w-4 h-4" /> :
+                               n.type === 'author_granted' ? <Crown className="w-4 h-4" /> :
+                               <User className="w-4 h-4" />}
                             </div>
                             <div className="text-xs text-zinc-300">
-                              <span className="font-bold text-white">{n.fromName}</span> gillade din prompt "{n.promptTitle}".
+                              {n.type === 'like' ? (
+                                <><span className="font-bold text-white">{n.fromName}</span> gillade din prompt "{n.promptTitle}".</>
+                              ) : n.type === 'warning' ? (
+                                <span><span className="font-bold text-amber-400">Varning!</span> Admin har skickat ett meddelande till dig. <button onClick={() => { setIsNotifOpen(false); setShowWarningModal(true); }} className="text-purple-400 hover:underline">Klicka för att svara.</button></span>
+                              ) : n.type === 'author_granted' ? (
+                                <span><span className="font-bold text-emerald-400">Grattis!</span> Du har blivit godkänd som skapare!</span>
+                              ) : (
+                                <><span className="font-bold text-white">{n.fromName}</span> {n.type === 'friend_request_accepted' ? 'accepterade din vänförfrågan' : ''}</>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -189,7 +209,10 @@ export const Header: React.FC = () => {
                 </button>
               )}
               {isAdmin && (
-                <span className="text-[10px] font-bold text-amber-400 px-1">▲ Admin</span>
+                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition" title="Admin Panel">
+                  <Shield className="w-3 h-3" />
+                  Admin
+                </button>
               )}
             </div>
 
@@ -251,6 +274,10 @@ export const Header: React.FC = () => {
         </div>
 
       </div>
+      {showAdminPanel && isAdmin && <AdminDashboardInner onClose={() => setShowAdminPanel(false)} />}
+      {showWarningModal && myProfile?.warnings && myProfile.warnings.length > 0 && (
+        <WarningModal warnings={myProfile.warnings} onClose={() => setShowWarningModal(false)} />
+      )}
     </header>
   );
 };
