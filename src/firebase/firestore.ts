@@ -290,7 +290,7 @@ export const seedInitialData = async (initialPrompts: PromptItem[], initialCateg
       batch.set(doc(db, PROMPTS_COL, p.id), p);
     }
     batch.set(doc(db, CATEGORIES_DOC), { list: initialCategories });
-    batch.set(doc(db, ADMIN_DOC), { email: 'admin@admin.com' });
+    batch.set(doc(db, ADMIN_DOC), { email: 'bynrnworld@gmail.com' });
     batch.set(doc(db, SEEDED_DOC), { seeded: true, at: new Date().toISOString() });
     await batch.commit();
   } else {
@@ -304,6 +304,6 @@ export const seedInitialData = async (initialPrompts: PromptItem[], initialCateg
 
   const adminSnap = await getDoc(doc(db, ADMIN_DOC));
   if (!adminSnap.exists()) {
-    await setDoc(doc(db, ADMIN_DOC), { email: 'admin@admin.com' });
+    await setDoc(doc(db, ADMIN_DOC), { email: 'bynrnworld@gmail.com' });
   }
 };
