@@ -6,8 +6,9 @@ import {
 } from 'lucide-react';
 import {
   subscribeApplications, updateApplicationStatus, subscribeAllUsers,
-  blockUser, unblockUser, subscribeBlockedEmails, sendWarning, sendWarningToAllUsers,
-  type AuthorApplication, type UserProfile, type Warning
+  blockUser, unblockUser, subscribeBlockedEmails, sendWarning, sendAdminNewsToAllUsers,
+  subscribeAdminNews,
+  type AuthorApplication, type UserProfile, type Warning, type AdminNews
 } from '../firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { usePrompts } from '../context/PromptContext';
@@ -64,13 +65,15 @@ export const AdminDashboardInner: React.FC<{
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<string | null>(null);
+  const [adminNewsList, setAdminNewsList] = useState<AdminNews[]>([]);
 
   useEffect(() => {
     setApplicationsError(false);
     const unsubApps = subscribeApplications(setApplications, () => setApplicationsError(true));
     const unsubUsers = subscribeAllUsers(setUsers);
     const unsubBlocked = subscribeBlockedEmails(setBlockedEmails);
-    return () => { unsubApps(); unsubUsers(); unsubBlocked(); };
+    const unsubNews = subscribeAdminNews(setAdminNewsList);
+    return () => { unsubApps(); unsubUsers(); unsubBlocked(); unsubNews(); };
   }, []);
 
   const handleAccept = async (app: AuthorApplication, period: '1month' | '5months' | '1year' | 'forever') => {
@@ -104,12 +107,12 @@ export const AdminDashboardInner: React.FC<{
     setWarningMessage('');
   };
 
-  const handleBroadcastWarning = async () => {
+  const handleBroadcastNews = async () => {
     if (!broadcastMessage.trim()) return;
     setBroadcastLoading(true);
     setBroadcastResult(null);
     try {
-      const count = await sendWarningToAllUsers(broadcastMessage.trim());
+      const { count } = await sendAdminNewsToAllUsers(broadcastMessage.trim());
       setBroadcastResult(t('adminBroadcastSuccess').replace('{count}', String(count)));
       setBroadcastMessage('');
     } catch (e) {
@@ -305,7 +308,7 @@ export const AdminDashboardInner: React.FC<{
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={handleBroadcastWarning}
+                    onClick={handleBroadcastNews}
                     disabled={broadcastLoading || !broadcastMessage.trim()}
                     className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-purple-500 disabled:opacity-50"
                   >
@@ -316,6 +319,25 @@ export const AdminDashboardInner: React.FC<{
                     <p className="text-xs text-zinc-400">{broadcastResult}</p>
                   )}
                 </div>
+
+                {adminNewsList.length > 0 && (
+                  <div className="mt-5 space-y-2 border-t border-purple-500/20 pt-4">
+                    <p className="text-[11px] font-bold uppercase text-zinc-500">{t('adminNewsHistory')}</p>
+                    {adminNewsList.slice(0, 5).map(item => (
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3"
+                      >
+                        <p className="line-clamp-2 text-xs text-zinc-300">{item.message}</p>
+                        <div className="mt-2 flex items-center gap-4 text-[11px] text-zinc-500">
+                          <span>{item.createdAt.split('T')[0]}</span>
+                          <span className="text-emerald-400">👍 {item.likeCount ?? 0}</span>
+                          <span className="text-red-400">👎 {item.dislikeCount ?? 0}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="relative mb-4">

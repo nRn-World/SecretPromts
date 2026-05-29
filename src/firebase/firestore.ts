@@ -16,12 +16,13 @@ const SEEDED_DOC = 'config/seeded';
 const USERS_COL = 'users';
 const APPLICATIONS_COL = 'applications';
 const BLOCKED_COL = 'blocked';
+const ADMIN_NEWS_COL = 'adminNews';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface UserNotification {
   id: string;
-  type: 'like' | 'friend_request_accepted' | 'warning' | 'warning_response' | 'author_granted';
+  type: 'like' | 'friend_request_accepted' | 'warning' | 'warning_response' | 'author_granted' | 'admin_news';
   fromUid?: string;
   fromName: string;
   promptTitle?: string;
@@ -32,6 +33,16 @@ export interface UserNotification {
 export type WarningResponse = 'accepted' | 'rejected';
 
 export const WARNING_RESPONSE_MAX_CHARS = 500;
+
+export interface AdminNews {
+  id?: string;
+  message: string;
+  createdAt: string;
+  likeCount: number;
+  dislikeCount: number;
+}
+
+export type AdminNewsReactionType = 'like' | 'dislike';
 
 export interface Warning {
   id: string;
@@ -584,25 +595,31 @@ export const sendWarning = async (uid: string, message: string) => {
   });
 };
 
-/** Send the same admin message as a warning to every registered user profile. */
-export const sendWarningToAllUsers = async (message: string): Promise<number> => {
-  const snap = await getDocs(collection(db, USERS_COL));
+/** Broadcast admin news to all users (not a warning — users like/dislike, no comments). */
+export const sendAdminNewsToAllUsers = async (message: string): Promise<{ newsId: string; count: number }> => {
   const trimmed = message.trim();
-  if (!trimmed) return 0;
+  if (!trimmed) return { newsId: '', count: 0 };
 
+  const createdAt = new Date().toISOString();
+  const newsRef = await addDoc(collection(db, ADMIN_NEWS_COL), {
+    message: trimmed,
+    createdAt,
+    likeCount: 0,
+    dislikeCount: 0,
+  });
+
+  const snap = await getDocs(collection(db, USERS_COL));
   let count = 0;
   const chunkSize = 400;
   for (let i = 0; i < snap.docs.length; i += chunkSize) {
     const batch = writeBatch(db);
     snap.docs.slice(i, i + chunkSize).forEach((userDoc) => {
-      const warning = buildWarning(trimmed);
       batch.update(userDoc.ref, {
-        warnings: arrayUnion(warning),
         notifications: arrayUnion({
-          id: Math.random().toString(36).slice(2, 11),
-          type: 'warning' as const,
+          id: newsRef.id,
+          type: 'admin_news' as const,
           fromName: 'Admin',
-          createdAt: new Date().toISOString(),
+          createdAt,
           read: false,
         }),
       });
@@ -610,7 +627,52 @@ export const sendWarningToAllUsers = async (message: string): Promise<number> =>
     });
     await batch.commit();
   }
-  return count;
+  return { newsId: newsRef.id, count };
+};
+
+export const subscribeAdminNews = (cb: (items: AdminNews[]) => void) =>
+  onSnapshot(query(collection(db, ADMIN_NEWS_COL), orderBy('createdAt', 'desc')), (snap) => {
+    cb(snap.docs.map(d => ({ ...d.data(), id: d.id } as AdminNews)));
+  });
+
+export const getAdminNews = async (newsId: string): Promise<AdminNews | null> => {
+  const snap = await getDoc(doc(db, ADMIN_NEWS_COL, newsId));
+  return snap.exists() ? ({ ...snap.data(), id: snap.id } as AdminNews) : null;
+};
+
+export const getAdminNewsReaction = async (
+  newsId: string,
+  uid: string
+): Promise<AdminNewsReactionType | null> => {
+  const snap = await getDoc(doc(db, ADMIN_NEWS_COL, newsId, 'reactions', uid));
+  return snap.exists() ? (snap.data().reaction as AdminNewsReactionType) : null;
+};
+
+export const reactToAdminNews = async (
+  newsId: string,
+  uid: string,
+  reaction: AdminNewsReactionType
+) => {
+  const newsRef = doc(db, ADMIN_NEWS_COL, newsId);
+  const reactionRef = doc(db, ADMIN_NEWS_COL, newsId, 'reactions', uid);
+  const existing = await getDoc(reactionRef);
+
+  if (existing.exists()) {
+    const prev = existing.data().reaction as AdminNewsReactionType;
+    if (prev === reaction) return;
+    await updateDoc(newsRef, {
+      likeCount: increment(reaction === 'like' ? 1 : -1),
+      dislikeCount: increment(reaction === 'dislike' ? 1 : -1),
+    });
+    await updateDoc(reactionRef, { reaction, reactedAt: new Date().toISOString() });
+    return;
+  }
+
+  await setDoc(reactionRef, { reaction, reactedAt: new Date().toISOString() });
+  await updateDoc(newsRef, {
+    likeCount: increment(reaction === 'like' ? 1 : 0),
+    dislikeCount: increment(reaction === 'dislike' ? 1 : 0),
+  });
 };
 
 export const respondToWarning = async (
