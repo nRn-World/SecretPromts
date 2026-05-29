@@ -1,4 +1,4 @@
-export const compressImage = (file: File, maxKB = 500): Promise<string> =>
+export const compressImage = (file: File, maxKB = 180): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
