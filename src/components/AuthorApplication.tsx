@@ -148,8 +148,6 @@ export const AuthorApplication: React.FC = () => {
     }
   };
 
-  if (isAdmin) return null;
-
   const blockedFromApplying = eligibility && !eligibility.canApply && !isGuest;
 
   if (isDismissed) {

@@ -9,4 +9,4 @@ export const uploadProfilePicture = async (uid: string, file: File): Promise<str
 
 /** Compress example image for author applications (stored on application doc). */
 export const compressApplicationExampleImage = async (file: File): Promise<string> =>
-  compressImage(file, 400);
+  compressImage(file, 180);
