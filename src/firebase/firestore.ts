@@ -31,6 +31,8 @@ export interface UserNotification {
 
 export type WarningResponse = 'accepted' | 'rejected';
 
+export const WARNING_RESPONSE_MAX_CHARS = 500;
+
 export interface Warning {
   id: string;
   message: string;
@@ -598,12 +600,14 @@ export const respondToWarning = async (
   const already = profile.warnings.find(w => w.id === warningId);
   if (already?.response) return;
 
+  const trimmedNote = (note?.trim() || '').slice(0, WARNING_RESPONSE_MAX_CHARS);
+
   const updatedWarnings = profile.warnings.map(w =>
     w.id === warningId
       ? {
           ...w,
           response: (accepted ? 'accepted' : 'rejected') as WarningResponse,
-          responseNote: note?.trim() || '',
+          responseNote: trimmedNote,
           respondedAt: new Date().toISOString(),
         }
       : w

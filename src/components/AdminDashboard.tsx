@@ -463,6 +463,14 @@ export const AdminDashboardInner: React.FC<{
                                 >
                                   {u.displayName}: {r.text}
                                 </p>
+                                {w.responseNote && (
+                                  <div className="mt-2 rounded-lg border border-zinc-700/60 bg-zinc-950/40 p-2.5">
+                                    <p className="text-[10px] font-bold uppercase text-zinc-500">
+                                      {t('warningUserReply')}
+                                    </p>
+                                    <p className="mt-1 text-sm text-zinc-300 whitespace-pre-wrap">{w.responseNote}</p>
+                                  </div>
+                                )}
                                 {w.respondedAt && (
                                   <p className="mt-1 text-[10px] text-zinc-600">{w.respondedAt.split('T')[0]}</p>
                                 )}
