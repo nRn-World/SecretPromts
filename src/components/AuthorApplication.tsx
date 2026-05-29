@@ -235,7 +235,7 @@ export const AuthorApplication: React.FC = () => {
           )}
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <a href={buildMailtoLink()} className="text-xs font-semibold text-zinc-500 transition hover:text-zinc-300">
+            <a href={`mailto:${APPLICATION_EMAIL}`} className="text-xs font-semibold text-zinc-500 transition hover:text-zinc-300">
               {t('authorMailFallback')}
             </a>
             <button
