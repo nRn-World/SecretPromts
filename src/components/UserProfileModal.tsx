@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   X, User, Heart, Sparkles, Grid3X3, UserPlus, UserCheck, UserMinus,
-  Star, StarOff, Layers, Clock, Eye, ThumbsUp, Send
+  Star, StarOff, Layers, Clock, Eye, ThumbsUp, Send, Camera
 } from 'lucide-react';
 import { usePrompts } from '../context/PromptContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,12 +12,13 @@ import {
   subscribeUserProfile, acceptFriendRequest, declineFriendRequest,
   type UserProfile,
 } from '../firebase/firestore';
+import { uploadProfilePicture } from '../firebase/storage';
 import type { PromptItem } from '../data/initialPrompts';
 
-type Tab = 'prompts' | 'favorites' | 'categories' | 'fav-creators' | 'friend-reqs';
+type Tab = 'prompts' | 'favorites' | 'categories' | 'fav-creators' | 'friends' | 'friend-reqs';
 
-const Avatar: React.FC<{ name: string; photoURL?: string; size?: 'sm' | 'lg' }> = ({
-  name, photoURL, size = 'lg'
+const Avatar: React.FC<{ name: string; photoURL?: string; size?: 'sm' | 'lg'; showUpload?: boolean; onUpload?: () => void }> = ({
+  name, photoURL, size = 'lg', showUpload, onUpload
 }) => {
   const initials = name
     .split(' ')
@@ -30,19 +31,26 @@ const Avatar: React.FC<{ name: string; photoURL?: string; size?: 'sm' | 'lg' }> 
     ? 'w-20 h-20 text-2xl'
     : 'w-8 h-8 text-xs';
 
-  if (photoURL) {
-    return (
-      <img
-        src={photoURL}
-        alt={name}
-        className={`${cls} rounded-full object-cover ring-2 ring-purple-500/40`}
-      />
-    );
-  }
-
-  return (
+  const img = photoURL ? (
+    <img
+      src={photoURL}
+      alt={name}
+      className={`${cls} rounded-full object-cover ring-2 ring-purple-500/40`}
+    />
+  ) : (
     <div className={`${cls} rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center font-black text-white ring-2 ring-purple-500/40 shrink-0`}>
       {initials || <User className={size === 'lg' ? 'w-8 h-8' : 'w-4 h-4'} />}
+    </div>
+  );
+
+  if (!showUpload || size !== 'lg') return img;
+
+  return (
+    <div className="relative group cursor-pointer" onClick={onUpload}>
+      {img}
+      <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <Camera className="w-6 h-6 text-white" />
+      </div>
     </div>
   );
 };
@@ -105,7 +113,7 @@ export const UserProfileModal: React.FC = () => {
 };
 
 const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selectedProfileUid }) => {
-  const { closeUserProfile, setSelectedPromptForDetail, prompts } = usePrompts();
+  const { closeUserProfile, openUserProfile, setSelectedPromptForDetail, prompts } = usePrompts();
   const { user, isGuest } = useAuth();
   const { t } = useLanguage();
 
@@ -115,11 +123,28 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
   const [activeTab, setActiveTab] = useState<Tab>('prompts');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isOwnProfile = !isGuest && user.id === selectedProfileUid;
   const isFriend = myProfile?.friends?.includes(selectedProfileUid ?? '') ?? false;
   const hasSentRequest = profile?.friendRequests?.includes(user.id ?? '') ?? false;
   const isFavUser = myProfile?.favoriteUsers?.includes(selectedProfileUid ?? '') ?? false;
+
+  const handlePhotoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user.id) return;
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadProfilePicture(user.id, file);
+      // Avataren uppdateras via Firestore onSnapshot automatiskt
+    } catch (err) {
+      console.error('Upload failed', err);
+    }
+    setUploadingPhoto(false);
+  }, [user.id]);
+
+  const friendsList = profile?.friends ?? [];
 
   // Load viewed profile
   useEffect(() => {
@@ -201,8 +226,26 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
           ) : profile ? (
             <div className="flex flex-col sm:flex-row sm:items-end gap-4">
               <div className="relative">
-                <Avatar name={profile.displayName} photoURL={profile.photoURL} size="lg" />
-                {isFriend && (
+                <Avatar
+                  name={profile.displayName}
+                  photoURL={profile.photoURL}
+                  size="lg"
+                  showUpload={isOwnProfile}
+                  onUpload={() => fileInputRef.current?.click()}
+                />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                {uploadingPhoto && (
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                    <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full" />
+                  </div>
+                )}
+                {isFriend && !isOwnProfile && (
                   <span className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-0.5 border-2 border-zinc-900">
                     <UserCheck className="w-3 h-3 text-white" />
                   </span>
@@ -222,10 +265,13 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
                     <Grid3X3 className="w-3 h-3" />
                     {userPrompts.length} prompts
                   </span>
-                  <span className="flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveTab('friends')}
+                    className="flex items-center gap-1 hover:text-zinc-300 transition-colors"
+                  >
                     <UserCheck className="w-3 h-3" />
                     {profile.friends?.length ?? 0} vänner
-                  </span>
+                  </button>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     {profile.createdAt?.split('T')[0] ?? ''}
@@ -295,6 +341,7 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
             { key: 'prompts', label: 'Skapade prompts', icon: Grid3X3, count: userPrompts.length, show: true },
             { key: 'favorites', label: 'Favoriter', icon: Heart, count: favPrompts.length, show: true },
             { key: 'categories', label: 'Kategorier', icon: Layers, count: profileCategories.length, show: true },
+            { key: 'friends', label: 'Vänner', icon: UserCheck, count: friendsList.length, show: true },
             { key: 'fav-creators', label: 'Favoritskapare', icon: Star, count: profile?.favoriteUsers?.length ?? 0, show: isOwnProfile },
             { key: 'friend-reqs', label: 'Vänförfrågningar', icon: UserPlus, count: profile?.friendRequests?.length ?? 0, show: isOwnProfile },
           ] as const).filter(t => t.show).map(tab => (
@@ -374,6 +421,21 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
                   >
                     {cat}
                   </span>
+                ))}
+              </div>
+            )
+          ) : activeTab === 'friends' ? (
+            friendsList.length === 0 ? (
+              <EmptyState icon={UserCheck} label="Inga vänner ännu" />
+            ) : (
+              <div className="space-y-3">
+                {friendsList.map(uid => (
+                  <UserListItem
+                    key={uid}
+                    uid={uid}
+                    type="fav"
+                    onView={() => { closeUserProfile(); setTimeout(() => openUserProfile(uid), 50); }}
+                  />
                 ))}
               </div>
             )

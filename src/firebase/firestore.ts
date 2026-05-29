@@ -81,6 +81,10 @@ export const updateUserBio = async (uid: string, bio: string) => {
   await updateDoc(doc(db, USERS_COL, uid), { bio });
 };
 
+export const updateUserPhoto = async (uid: string, photoURL: string) => {
+  await updateDoc(doc(db, USERS_COL, uid), { photoURL });
+};
+
 // Get prompts created by a specific user
 export const getUserPrompts = async (uid: string): Promise<PromptItem[]> => {
   const q = query(collection(db, PROMPTS_COL), where('authorId', '==', uid), orderBy('createdAt', 'desc'));
