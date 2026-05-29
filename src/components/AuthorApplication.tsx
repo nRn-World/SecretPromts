@@ -9,7 +9,7 @@ type ApplicationStatus = 'idle' | 'sending' | 'success' | 'error';
 const APPLICATION_EMAIL = 'bynrnworld@gmail.com';
 
 export const AuthorApplication: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { user, isGuest } = useAuth();
   const [displayName, setDisplayName] = useState(user.displayName !== 'Guest' ? user.displayName : '');
   const [contactEmail, setContactEmail] = useState(user.email || '');
@@ -50,12 +50,12 @@ export const AuthorApplication: React.FC = () => {
       });
 
       setStatus('success');
-      setMessage('Ansökan skickad! Admin kommer att granska den.');
+      setMessage(t('authorFirestoreSuccess'));
       resetForm();
     } catch (error) {
       console.error('Author application failed', error);
       setStatus('error');
-      setMessage('Något gick fel. Försök igen senare.');
+      setMessage(t('authorFirestoreError'));
     }
   };
 
