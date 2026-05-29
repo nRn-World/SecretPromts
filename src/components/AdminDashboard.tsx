@@ -65,12 +65,13 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
     setActionLoading(null);
   };
 
-  const handleBlock = async (email: string) => {
-    await blockUser(email);
+  const handleBlock = async (uid: string, email?: string) => {
+    if (!email) return;
+    await blockUser(uid, email);
   };
 
-  const handleUnblock = async (email: string) => {
-    await unblockUser(email);
+  const handleUnblock = async (email: string, uid?: string) => {
+    await unblockUser(email, uid);
   };
 
   const handleSendWarning = async () => {
@@ -210,7 +211,7 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
               </div>
               <div className="space-y-3">
                 {users
-                  .filter(u => u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || u.uid?.includes(searchQuery))
+                  .filter(u => u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || u.uid?.includes(searchQuery) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(u => (
                     <div key={u.uid} className="flex items-center justify-between p-4 rounded-xl bg-zinc-800/50 border border-zinc-800">
                       <div className="flex items-center gap-3 min-w-0">
@@ -218,11 +219,13 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
                           {u.displayName?.charAt(0)?.toUpperCase() || '?'}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-white text-sm truncate">{u.displayName}</span>
                             {u.isAuthor && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                            {u.isBlocked && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Blockerad</span>}
                           </div>
-                          <div className="flex items-center gap-3 text-[11px] text-zinc-500 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500 mt-0.5">
+                            {u.email && <span className="text-zinc-400">{u.email}</span>}
                             <span>{u.uid?.slice(0, 12)}...</span>
                             {u.authorExpiresAt && (
                               <span className="text-amber-400/70">Utgår: {u.authorExpiresAt.split('T')[0]}</span>
@@ -238,13 +241,23 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
                         >
                           <AlertTriangle className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleBlock(u.uid)}
-                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-red-400 transition"
-                          title="Blockera"
-                        >
-                          <Ban className="w-3.5 h-3.5" />
-                        </button>
+                        {!u.isBlocked ? (
+                          <button
+                            onClick={() => handleBlock(u.uid, u.email)}
+                            className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-red-400 transition"
+                            title="Blockera"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUnblock(u.email!, u.uid)}
+                            className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-emerald-400 transition"
+                            title="Avblockera"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -267,7 +280,7 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
                       </div>
                     </div>
                     <button
-                      onClick={() => handleUnblock(b.email)}
+                      onClick={() => handleUnblock(b.email, b.uid)}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition"
                     >
                       <UserCheck className="w-3 h-3" />

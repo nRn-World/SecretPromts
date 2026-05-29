@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn } from '../firebase/auth';
-import { getAdminEmail, setAdminEmail, isEmailBlocked } from '../firebase/firestore';
+import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile } from '../firebase/firestore';
 import type { User } from 'firebase/auth';
 
 interface AuthContextType {
@@ -40,12 +40,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [adminEmail, setAdminEmailState] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthChanged((user) => {
+    const unsub = onAuthChanged(async (user) => {
       setFirebaseUser(user);
-      if (!user) setLoading(false);
+      if (!user) {
+        setLoading(false);
+        setIsBlocked(false);
+      } else {
+        // Check if email is blocked
+        const emailBlocked = await isEmailBlocked(user.email || '');
+        setIsBlocked(emailBlocked);
+        
+        // Also check user profile
+        const profile = await getUserProfile(user.uid);
+        if (profile?.isBlocked) {
+          setIsBlocked(true);
+        }
+      }
     });
     return unsub;
   }, []);
@@ -62,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [firebaseUser]);
 
   const user = useMemo<AuthUser>(() => {
-    if (!firebaseUser) return guestUser;
+    if (!firebaseUser || isBlocked) return guestUser;
     return {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
@@ -70,7 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isGuest: false,
       isAdmin: firebaseUser.email === adminEmail,
     };
-  }, [firebaseUser, adminEmail]);
+  }, [firebaseUser, adminEmail, isBlocked]);
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
@@ -160,6 +174,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fbLogOut();
     setAdminEmailState(null);
   };
+
+  // If user is blocked, log them out
+  useEffect(() => {
+    if (isBlocked && firebaseUser) {
+      fbLogOut();
+    }
+  }, [isBlocked, firebaseUser]);
 
   const value = useMemo<AuthContextType>(() => ({
     user,

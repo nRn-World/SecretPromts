@@ -38,6 +38,7 @@ export interface Warning {
 
 export interface UserProfile {
   uid: string;
+  email?: string;
   displayName: string;
   photoURL?: string;
   bio?: string;
@@ -68,12 +69,13 @@ export interface AuthorApplication {
   reviewedAt?: string | null;
 }
 
-export const ensureUserProfile = async (uid: string, displayName: string, photoURL?: string) => {
+export const ensureUserProfile = async (uid: string, displayName: string, email?: string, photoURL?: string) => {
   const ref = doc(db, USERS_COL, uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     const profile: UserProfile = {
       uid,
+      email,
       displayName,
       photoURL: photoURL ?? '',
       bio: '',
@@ -95,6 +97,7 @@ export const ensureUserProfile = async (uid: string, displayName: string, photoU
   const updates: Partial<UserProfile> = {};
   if (displayName && data.displayName !== displayName) updates.displayName = displayName;
   if (photoURL && data.photoURL !== photoURL) updates.photoURL = photoURL;
+  if (email && data.email !== email) updates.email = email;
   if (Object.keys(updates).length) await updateDoc(ref, updates);
   return { ...data, ...updates };
 };
@@ -365,26 +368,28 @@ export const updateApplicationStatus = async (
 
 // ─── Blocked Users ────────────────────────────────────────────────────────────
 
-export const blockUser = async (email: string, reason?: string) => {
+export const blockUser = async (uid: string, email: string, reason?: string) => {
   await setDoc(doc(db, BLOCKED_COL, email), {
     email,
+    uid,
     reason: reason || '',
     blockedAt: new Date().toISOString(),
   });
-  // Also mark the user's profile as blocked if they have one
-  const q = query(collection(db, USERS_COL), where('email', '==', email));
-  const snap = await getDocs(q);
-  for (const d of snap.docs) {
-    await updateDoc(doc(db, USERS_COL, d.id), { isBlocked: true });
-  }
+  // Mark the user's profile as blocked
+  await updateDoc(doc(db, USERS_COL, uid), { isBlocked: true });
 };
 
-export const unblockUser = async (email: string) => {
+export const unblockUser = async (email: string, uid?: string) => {
   await deleteDoc(doc(db, BLOCKED_COL, email));
-  const q = query(collection(db, USERS_COL), where('email', '==', email));
-  const snap = await getDocs(q);
-  for (const d of snap.docs) {
-    await updateDoc(doc(db, USERS_COL, d.id), { isBlocked: false });
+  if (uid) {
+    await updateDoc(doc(db, USERS_COL, uid), { isBlocked: false });
+  } else {
+    // Fallback: try to find user by email
+    const q = query(collection(db, USERS_COL), where('email', '==', email));
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await updateDoc(doc(db, USERS_COL, d.id), { isBlocked: false });
+    }
   }
 };
 

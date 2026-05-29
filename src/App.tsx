@@ -24,8 +24,8 @@ function UserProfileSync() {
   const { user, isGuest } = useAuth();
   useEffect(() => {
     if (isGuest || !user.id) return;
-    ensureUserProfile(user.id, user.displayName).catch(console.error);
-  }, [user.id, user.displayName, isGuest]);
+    ensureUserProfile(user.id, user.displayName, user.email).catch(console.error);
+  }, [user.id, user.displayName, user.email, isGuest]);
   return null;
 }
 
