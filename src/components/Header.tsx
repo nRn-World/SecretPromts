@@ -11,7 +11,7 @@ import {
   subscribePendingApplicationCount,
   type UserProfile
 } from '../firebase/firestore';
-import { AdminDashboardInner } from './AdminDashboard';
+import { AdminDashboardModal } from './AdminDashboard';
 import { WarningModal } from './WarningModal';
 
 
@@ -336,7 +336,7 @@ export const Header: React.FC = () => {
 
       </div>
       {showAdminPanel && isAdmin && (
-        <AdminDashboardInner
+        <AdminDashboardModal
           onClose={() => setShowAdminPanel(false)}
           initialPendingCount={pendingAuthorApps}
         />

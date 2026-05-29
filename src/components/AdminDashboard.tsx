@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Check, XCircle, Clock, Shield, UserX, UserCheck, AlertTriangle,
   Send, Mail, Search, MessageSquare, Ban, Crown
@@ -90,12 +91,21 @@ export const AdminDashboardInner: React.FC<{
   const pendingApps = applications.filter(a => a.status === 'pending');
 
   return (
-    <div className="fixed inset-0 z-[70] overflow-y-auto bg-zinc-950/95 backdrop-blur-2xl flex items-start justify-center p-3 sm:p-6 pt-16 animate-fade-in" onClick={onClose}>
-      <div className="relative w-full max-w-5xl bg-zinc-900 rounded-3xl border border-zinc-800 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-md">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/90 p-3 backdrop-blur-md sm:p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="admin-panel-title"
+    >
+      <div
+        className="relative flex h-[min(90dvh,880px)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/50"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-5 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <Shield className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-black text-white">Admin Panel</h2>
+            <h2 id="admin-panel-title" className="text-lg font-black text-white sm:text-xl">Admin Panel</h2>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
             <X className="w-4 h-4" />
@@ -103,7 +113,7 @@ export const AdminDashboardInner: React.FC<{
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-zinc-800 px-6 overflow-x-auto scrollbar-hide">
+        <div className="flex shrink-0 overflow-x-auto border-b border-zinc-800 px-4 scrollbar-hide sm:px-6">
           {([
             { key: 'applications', label: 'Become an Author', icon: Crown, count: pendingApps.length },
             { key: 'users', label: 'Användare', icon: UserCheck, count: 0 },
@@ -128,7 +138,7 @@ export const AdminDashboardInner: React.FC<{
           ))}
         </div>
 
-        <div className="p-6 max-h-[70vh] overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {activeTab === 'applications' && (
             <div className="space-y-4">
               {applicationsError && (
@@ -148,7 +158,7 @@ export const AdminDashboardInner: React.FC<{
                 <p className="text-center text-zinc-500 py-8">
                   {initialPendingCount > 0
                     ? 'Laddar ansökningar...'
-                    : 'Inga \"Become an Author\"-ansökningar ännu'}
+                    : 'Inga Become an Author-ansökningar ännu'}
                 </p>
               ) : applications.length > 0 ? (
                 applications.map(app => (
@@ -354,7 +364,7 @@ export const AdminDashboardInner: React.FC<{
 
         {/* Warning Modal */}
         {showWarningModal && warningTarget && (
-          <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4" onClick={() => setShowWarningModal(false)}>
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowWarningModal(false)}>
             <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
               <div className="flex items-center gap-3 mb-4">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -382,9 +392,25 @@ export const AdminDashboardInner: React.FC<{
   );
 };
 
+/** Renders admin panel in a full-screen portal (not clipped by header). */
+export const AdminDashboardModal: React.FC<{
+  onClose: () => void;
+  initialPendingCount?: number;
+}> = (props) => {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return createPortal(<AdminDashboardInner {...props} />, document.body);
+};
+
 export const AdminDashboard: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  return isOpen ? <AdminDashboardInner onClose={() => setIsOpen(false)} /> : null;
+  return isOpen ? <AdminDashboardModal onClose={() => setIsOpen(false)} /> : null;
 };
 
 export const useAdminDashboard = () => {
