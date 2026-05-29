@@ -507,6 +507,32 @@ export const blockUser = async (uid: string, email: string, reason?: string) => 
   await updateDoc(doc(db, USERS_COL, uid), { isBlocked: true });
 };
 
+/** Admin: remove user profile, their prompts, and block email from re-registering easily. */
+export const deleteUserAccountAsAdmin = async (uid: string, email?: string) => {
+  const promptsSnap = await getDocs(
+    query(collection(db, PROMPTS_COL), where('authorId', '==', uid))
+  );
+
+  const promptDocs = promptsSnap.docs;
+  for (let i = 0; i < promptDocs.length; i += 400) {
+    const batch = writeBatch(db);
+    promptDocs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+
+  const batch = writeBatch(db);
+  batch.delete(doc(db, USERS_COL, uid));
+  if (email) {
+    batch.set(doc(db, BLOCKED_COL, email), {
+      email,
+      uid,
+      reason: 'Account deleted by admin',
+      blockedAt: new Date().toISOString(),
+    });
+  }
+  await batch.commit();
+};
+
 export const unblockUser = async (email: string, uid?: string) => {
   await deleteDoc(doc(db, BLOCKED_COL, email));
   if (uid) {

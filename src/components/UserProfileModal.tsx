@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   X, User, Heart, Sparkles, Grid3X3, UserPlus, UserCheck, UserMinus,
-  Star, StarOff, Layers, Clock, Eye, ThumbsUp, Send, Camera
+  Star, StarOff, Layers, Clock, Eye, ThumbsUp, Send, Camera,
+  AlertTriangle, Ban, Trash2, Shield
 } from 'lucide-react';
 import { usePrompts } from '../context/PromptContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
-  getUserProfile, getUserPrompts, ensureUserProfile,
+  getUserProfile, getUserPrompts,
   sendFriendRequest, removeFriend, toggleFavoriteUser,
   subscribeUserProfile, acceptFriendRequest, declineFriendRequest,
+  blockUser, unblockUser, sendWarning, deleteUserAccountAsAdmin,
   type UserProfile,
 } from '../firebase/firestore';
 import { uploadProfilePicture } from '../firebase/storage';
@@ -114,7 +116,7 @@ export const UserProfileModal: React.FC = () => {
 
 const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selectedProfileUid }) => {
   const { closeUserProfile, openUserProfile, setSelectedPromptForDetail, prompts } = usePrompts();
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, isAdmin } = useAuth();
   const { t } = useLanguage();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -124,6 +126,9 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showAdminWarning, setShowAdminWarning] = useState(false);
+  const [adminWarningMessage, setAdminWarningMessage] = useState('');
+  const [adminActionLoading, setAdminActionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isOwnProfile = !isGuest && user.id === selectedProfileUid;
@@ -193,13 +198,60 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
   const favPrompts = prompts.filter(p => p.isFavorite && p.authorId === selectedProfileUid);
   const profileCategories = profile?.createdCategories ?? [];
 
+  const handleAdminWarn = async () => {
+    if (!selectedProfileUid || !adminWarningMessage.trim()) return;
+    setAdminActionLoading(true);
+    try {
+      await sendWarning(selectedProfileUid, adminWarningMessage.trim());
+      setShowAdminWarning(false);
+      setAdminWarningMessage('');
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleAdminBlock = async () => {
+    if (!selectedProfileUid || !profile?.email) return;
+    setAdminActionLoading(true);
+    try {
+      await blockUser(selectedProfileUid, profile.email);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleAdminUnblock = async () => {
+    if (!profile?.email) return;
+    setAdminActionLoading(true);
+    try {
+      await unblockUser(profile.email, selectedProfileUid);
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
+  const handleAdminDelete = async () => {
+    if (!selectedProfileUid || !profile) return;
+    const confirmed = window.confirm(
+      t('adminDeleteConfirm', { name: profile.displayName })
+    );
+    if (!confirmed) return;
+    setAdminActionLoading(true);
+    try {
+      await deleteUserAccountAsAdmin(selectedProfileUid, profile.email);
+      closeUserProfile();
+    } finally {
+      setAdminActionLoading(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-[110] overflow-y-auto bg-zinc-950/95 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6 animate-fade-in"
       onClick={closeUserProfile}
     >
       <div
-        className="relative w-full max-w-3xl bg-zinc-900 rounded-3xl border border-zinc-800 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header gradient bar ── */}
@@ -255,7 +307,18 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-2xl font-black text-white truncate">{profile.displayName}</h2>
-                  {isFavUser && <Star className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />}
+                  {isFavUser && !isAdmin && <Star className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />}
+                  {profile.isBlocked && (
+                    <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                      {t('adminBlockedBadge')}
+                    </span>
+                  )}
+                  {isAdmin && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                      <Shield className="h-3 w-3" />
+                      Admin
+                    </span>
+                  )}
                 </div>
                 {profile.bio && (
                   <p className="text-sm text-zinc-400 mt-1 leading-relaxed max-w-sm">{profile.bio}</p>
@@ -279,8 +342,55 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
                 </div>
               </div>
 
-              {/* Social actions (only shown if NOT own profile) */}
-              {!isOwnProfile && !isGuest && (
+              {/* Admin actions */}
+              {isAdmin && !isOwnProfile && profile && (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[200px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminWarning(true)}
+                      disabled={adminActionLoading}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-400 transition hover:bg-amber-500/20 disabled:opacity-50"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {t('adminWarnUser')}
+                    </button>
+                    {profile.isBlocked ? (
+                      <button
+                        type="button"
+                        onClick={handleAdminUnblock}
+                        disabled={adminActionLoading || !profile.email}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                        {t('adminUnblockUser')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleAdminBlock}
+                        disabled={adminActionLoading || !profile.email}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                        {t('adminBlockUser')}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleAdminDelete}
+                      disabled={adminActionLoading}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-950/60 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {t('adminDeleteUser')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Social actions (only shown if NOT own profile and not admin view) */}
+              {!isAdmin && !isOwnProfile && !isGuest && (
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Favourite user toggle */}
                   <button
@@ -480,6 +590,50 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
             )
           ) : null}
         </div>
+
+        {showAdminWarning && profile && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setShowAdminWarning(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400" />
+                <h3 className="font-bold text-white">
+                  {t('adminWarnUserTitle', { name: profile.displayName })}
+                </h3>
+              </div>
+              <textarea
+                value={adminWarningMessage}
+                onChange={e => setAdminWarningMessage(e.target.value)}
+                placeholder={t('adminBroadcastPlaceholder')}
+                rows={4}
+                className="w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm text-white focus:border-amber-500/50 focus:outline-none"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowAdminWarning(false); setAdminWarningMessage(''); }}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+                >
+                  {t('adminCancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdminWarn}
+                  disabled={!adminWarningMessage.trim() || adminActionLoading}
+                  className="inline-flex items-center gap-1 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-50"
+                >
+                  <Send className="h-3 w-3" />
+                  {t('adminSendWarning')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
