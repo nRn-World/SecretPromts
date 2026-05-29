@@ -318,6 +318,9 @@ export const subscribeApplications = (cb: (apps: AuthorApplication[]) => void) =
     query(collection(db, APPLICATIONS_COL), orderBy('createdAt', 'desc')),
     (snap) => {
       cb(snap.docs.map(d => ({ ...d.data(), id: d.id } as AuthorApplication)));
+    },
+    (error) => {
+      console.error('Firestore applications subscription error:', error);
     }
   );
 

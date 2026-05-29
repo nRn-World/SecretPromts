@@ -9,8 +9,8 @@ type ApplicationStatus = 'idle' | 'sending' | 'success' | 'error';
 const APPLICATION_EMAIL = 'bynrnworld@gmail.com';
 
 export const AuthorApplication: React.FC = () => {
-  const { t, language } = useLanguage();
-  const { user, isGuest } = useAuth();
+  const { t } = useLanguage();
+  const { user, isGuest, isAdmin } = useAuth();
   const [displayName, setDisplayName] = useState(user.displayName !== 'Guest' ? user.displayName : '');
   const [contactEmail, setContactEmail] = useState(user.email || '');
   const [portfolioUrl, setPortfolioUrl] = useState('');
@@ -58,6 +58,8 @@ export const AuthorApplication: React.FC = () => {
       setMessage(t('authorFirestoreError'));
     }
   };
+
+  if (isAdmin) return null;
 
   if (isDismissed) {
     return (
