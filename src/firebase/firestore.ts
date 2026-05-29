@@ -314,15 +314,13 @@ export const submitApplication = async (data: Omit<AuthorApplication, 'id' | 'cr
 };
 
 export const subscribeApplications = (cb: (apps: AuthorApplication[]) => void) =>
-  onSnapshot(
-    query(collection(db, APPLICATIONS_COL), orderBy('createdAt', 'desc')),
-    (snap) => {
-      cb(snap.docs.map(d => ({ ...d.data(), id: d.id } as AuthorApplication)));
-    },
-    (error) => {
-      console.error('Firestore applications subscription error:', error);
-    }
-  );
+  onSnapshot(collection(db, APPLICATIONS_COL), (snap) => {
+    const apps = snap.docs.map(d => ({ ...d.data(), id: d.id } as AuthorApplication));
+    apps.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    cb(apps);
+  }, (error) => {
+    console.error('Firestore applications subscription error:', error);
+  });
 
 export const updateApplicationStatus = async (
   id: string,
