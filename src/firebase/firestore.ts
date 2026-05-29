@@ -316,14 +316,33 @@ export const submitApplication = async (data: Omit<AuthorApplication, 'id' | 'cr
   return ref.id;
 };
 
-export const subscribeApplications = (cb: (apps: AuthorApplication[]) => void) =>
+export const subscribeApplications = (
+  cb: (apps: AuthorApplication[]) => void,
+  onError?: (error: Error) => void
+) =>
   onSnapshot(collection(db, APPLICATIONS_COL), (snap) => {
     const apps = snap.docs.map(d => ({ ...d.data(), id: d.id } as AuthorApplication));
     apps.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     cb(apps);
   }, (error) => {
     console.error('Firestore applications subscription error:', error);
+    onError?.(error);
   });
+
+/** Live count of pending "Become an Author" applications (for admin badge). */
+export const subscribePendingApplicationCount = (
+  cb: (count: number) => void,
+  onError?: (error: Error) => void
+) => {
+  const q = query(collection(db, APPLICATIONS_COL), where('status', '==', 'pending'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.size);
+  }, (error) => {
+    console.error('Firestore pending applications subscription error:', error);
+    onError?.(error);
+    cb(0);
+  });
+};
 
 export const updateApplicationStatus = async (
   id: string,

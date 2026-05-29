@@ -5,7 +5,12 @@ import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { LanguageSelector } from './LanguageSelector';
 import logoImg from '../../logo/SP-no-bg.png';
-import { subscribeUserProfile, markNotificationsRead, type UserProfile } from '../firebase/firestore';
+import {
+  subscribeUserProfile,
+  markNotificationsRead,
+  subscribePendingApplicationCount,
+  type UserProfile
+} from '../firebase/firestore';
 import { AdminDashboardInner } from './AdminDashboard';
 import { WarningModal } from './WarningModal';
 
@@ -23,6 +28,8 @@ export const Header: React.FC = () => {
   } = usePrompts();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [pendingAuthorApps, setPendingAuthorApps] = useState(0);
+  const [authorAppsLoadError, setAuthorAppsLoadError] = useState(false);
 
   const customCount = prompts.filter(p => p.isCustom).length;
 
@@ -40,6 +47,19 @@ export const Header: React.FC = () => {
       setActiveTab('all');
     }
   }, [activeTab, isGuest, setActiveTab]);
+
+  React.useEffect(() => {
+    if (!isAdmin) {
+      setPendingAuthorApps(0);
+      setAuthorAppsLoadError(false);
+      return;
+    }
+    const unsub = subscribePendingApplicationCount(
+      setPendingAuthorApps,
+      () => setAuthorAppsLoadError(true)
+    );
+    return unsub;
+  }, [isAdmin]);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
@@ -209,9 +229,22 @@ export const Header: React.FC = () => {
                 </button>
               )}
               {isAdmin && (
-                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition" title="Admin Panel">
+                <button
+                  onClick={() => setShowAdminPanel(true)}
+                  className="relative flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition"
+                  title={
+                    pendingAuthorApps > 0
+                      ? t('adminPendingAuthorAppsTitle').replace('{count}', String(pendingAuthorApps))
+                      : t('adminPanelTitle')
+                  }
+                >
                   <Shield className="w-3 h-3" />
                   Admin
+                  {pendingAuthorApps > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-zinc-950 leading-none">
+                      {pendingAuthorApps > 9 ? '9+' : pendingAuthorApps}
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -275,8 +308,39 @@ export const Header: React.FC = () => {
           )}
         </div>
 
+        {isAdmin && pendingAuthorApps > 0 && (
+          <div className="border-t border-amber-500/20 bg-amber-500/10 px-4 py-2.5 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setShowAdminPanel(true)}
+              className="mx-auto flex max-w-[90rem] w-full items-center justify-between gap-3 text-left"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Crown className="h-4 w-4 shrink-0 text-amber-400" />
+                <p className="text-xs font-bold text-amber-100 sm:text-sm">
+                  {t('adminPendingAuthorAppsBanner').replace('{count}', String(pendingAuthorApps))}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-amber-300">
+                {t('adminReviewApplications')}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {isAdmin && authorAppsLoadError && pendingAuthorApps === 0 && (
+          <div className="border-t border-red-500/20 bg-red-500/10 px-4 py-2 text-center text-xs text-red-300">
+            {t('adminAuthorAppsLoadError')}
+          </div>
+        )}
+
       </div>
-      {showAdminPanel && isAdmin && <AdminDashboardInner onClose={() => setShowAdminPanel(false)} />}
+      {showAdminPanel && isAdmin && (
+        <AdminDashboardInner
+          onClose={() => setShowAdminPanel(false)}
+          initialPendingCount={pendingAuthorApps}
+        />
+      )}
       {showWarningModal && myProfile?.warnings && myProfile.warnings.length > 0 && (
         <WarningModal warnings={myProfile.warnings} onClose={() => setShowWarningModal(false)} />
       )}

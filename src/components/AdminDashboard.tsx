@@ -30,10 +30,14 @@ const getPeriodEnd = (period: string): string | null => {
   return now.toISOString().split('T')[0];
 };
 
-export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const AdminDashboardInner: React.FC<{
+  onClose: () => void;
+  initialPendingCount?: number;
+}> = ({ onClose, initialPendingCount = 0 }) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('applications');
   const [applications, setApplications] = useState<AuthorApplication[]>([]);
+  const [applicationsError, setApplicationsError] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [blockedEmails, setBlockedEmails] = useState<any[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -45,7 +49,8 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
   const [warningMessage, setWarningMessage] = useState('');
 
   useEffect(() => {
-    const unsubApps = subscribeApplications(setApplications);
+    setApplicationsError(false);
+    const unsubApps = subscribeApplications(setApplications, () => setApplicationsError(true));
     const unsubUsers = subscribeAllUsers(setUsers);
     const unsubBlocked = subscribeBlockedEmails(setBlockedEmails);
     return () => { unsubApps(); unsubUsers(); unsubBlocked(); };
@@ -100,7 +105,7 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
         {/* Tabs */}
         <div className="flex border-b border-zinc-800 px-6 overflow-x-auto scrollbar-hide">
           {([
-            { key: 'applications', label: 'Ansökningar', icon: Crown, count: pendingApps.length },
+            { key: 'applications', label: 'Become an Author', icon: Crown, count: pendingApps.length },
             { key: 'users', label: 'Användare', icon: UserCheck, count: 0 },
             { key: 'blocked', label: 'Blockerade', icon: Ban, count: blockedEmails.length },
             { key: 'warnings', label: 'Varningar', icon: AlertTriangle, count: 0 },
@@ -126,9 +131,26 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
         <div className="p-6 max-h-[70vh] overflow-y-auto">
           {activeTab === 'applications' && (
             <div className="space-y-4">
-              {applications.length === 0 ? (
-                <p className="text-center text-zinc-500 py-8">Inga ansökningar ännu</p>
-              ) : (
+              {applicationsError && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+                  Kunde inte ladda ansökningar. Kontrollera Firestore-regler för samlingen <code className="text-red-200">applications</code> så att admin kan läsa dokument.
+                </div>
+              )}
+              {!applicationsError && pendingApps.length > 0 && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3">
+                  <Crown className="w-5 h-5 text-amber-400 shrink-0" />
+                  <p className="text-sm font-bold text-amber-100">
+                    {pendingApps.length} ny{pendingApps.length === 1 ? '' : 'a'} &quot;Become an Author&quot;-ansökning{pendingApps.length === 1 ? '' : 'ar'} väntar på granskning
+                  </p>
+                </div>
+              )}
+              {applications.length === 0 && !applicationsError ? (
+                <p className="text-center text-zinc-500 py-8">
+                  {initialPendingCount > 0
+                    ? 'Laddar ansökningar...'
+                    : 'Inga \"Become an Author\"-ansökningar ännu'}
+                </p>
+              ) : applications.length > 0 ? (
                 applications.map(app => (
                   <div key={app.id} className={`rounded-2xl border p-5 ${
                     app.status === 'pending' ? 'border-amber-500/30 bg-amber-500/5' :
@@ -193,7 +215,7 @@ export const AdminDashboardInner: React.FC<{ onClose: () => void }> = ({ onClose
                     </div>
                   </div>
                 ))
-              )}
+              ) : null}
             </div>
           )}
 

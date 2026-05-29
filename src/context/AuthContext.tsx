@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: firebaseUser.email || '',
       displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
       isGuest: false,
-      isAdmin: firebaseUser.email === adminEmail,
+      isAdmin: !!adminEmail && firebaseUser.email?.toLowerCase() === adminEmail.toLowerCase(),
     };
   }, [firebaseUser, adminEmail, isBlocked]);
 
