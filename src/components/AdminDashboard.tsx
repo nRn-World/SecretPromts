@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X, Check, XCircle, Clock, Shield, UserX, UserCheck, AlertTriangle,
-  Send, Mail, Search, MessageSquare, Ban, Crown
+  X, Check, XCircle, Clock, Shield, UserCheck, AlertTriangle,
+  Send, Mail, Search, Ban, Crown, Eye, Users, Megaphone
 } from 'lucide-react';
 import {
   subscribeApplications, updateApplicationStatus, subscribeAllUsers,
-  blockUser, unblockUser, subscribeBlockedEmails, sendWarning,
-  type AuthorApplication, type UserProfile
+  blockUser, unblockUser, subscribeBlockedEmails, sendWarning, sendWarningToAllUsers,
+  type AuthorApplication, type UserProfile, type Warning
 } from '../firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { usePrompts } from '../context/PromptContext';
+import { useLanguage } from '../context/LanguageContext';
 
 type Tab = 'applications' | 'users' | 'blocked' | 'warnings';
 
@@ -19,6 +21,15 @@ const PERIODS = [
   { value: '1year', label: '1 år' },
   { value: 'forever', label: 'Tillsvidare' },
 ] as const;
+
+const warningResponseLabel = (w: Warning): { text: string; tone: 'ok' | 'no' | 'legacy' | 'pending' } => {
+  if (w.response === 'accepted') return { text: 'Godkände meddelandet', tone: 'ok' };
+  if (w.response === 'rejected') return { text: 'Godkände inte', tone: 'no' };
+  if (typeof (w as Warning & { response?: unknown }).response === 'string' && (w as { response: string }).response) {
+    return { text: (w as { response: string }).response, tone: 'legacy' };
+  }
+  return { text: 'Väntar på svar', tone: 'pending' };
+};
 
 const getPeriodEnd = (period: string): string | null => {
   if (period === 'forever') return null;
@@ -36,6 +47,8 @@ export const AdminDashboardInner: React.FC<{
   initialPendingCount?: number;
 }> = ({ onClose, initialPendingCount = 0 }) => {
   const { user } = useAuth();
+  const { openUserProfile } = usePrompts();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('applications');
   const [applications, setApplications] = useState<AuthorApplication[]>([]);
   const [applicationsError, setApplicationsError] = useState(false);
@@ -48,6 +61,9 @@ export const AdminDashboardInner: React.FC<{
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [warningTarget, setWarningTarget] = useState<UserProfile | null>(null);
   const [warningMessage, setWarningMessage] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<string | null>(null);
 
   useEffect(() => {
     setApplicationsError(false);
@@ -88,7 +104,32 @@ export const AdminDashboardInner: React.FC<{
     setWarningMessage('');
   };
 
+  const handleBroadcastWarning = async () => {
+    if (!broadcastMessage.trim()) return;
+    setBroadcastLoading(true);
+    setBroadcastResult(null);
+    try {
+      const count = await sendWarningToAllUsers(broadcastMessage.trim());
+      setBroadcastResult(t('adminBroadcastSuccess').replace('{count}', String(count)));
+      setBroadcastMessage('');
+    } catch (e) {
+      console.error(e);
+      setBroadcastResult(t('adminBroadcastError'));
+    } finally {
+      setBroadcastLoading(false);
+    }
+  };
+
+  const handleViewProfile = (uid: string) => {
+    onClose();
+    openUserProfile(uid);
+  };
+
   const pendingApps = applications.filter(a => a.status === 'pending');
+  const warningsNeedingReview = users.reduce(
+    (n, u) => n + (u.warnings?.filter(w => !w.response).length ?? 0),
+    0
+  );
 
   return (
     <div
@@ -116,9 +157,9 @@ export const AdminDashboardInner: React.FC<{
         <div className="flex shrink-0 overflow-x-auto border-b border-zinc-800 px-4 scrollbar-hide sm:px-6">
           {([
             { key: 'applications', label: 'Become an Author', icon: Crown, count: pendingApps.length },
-            { key: 'users', label: 'Användare', icon: UserCheck, count: 0 },
+            { key: 'users', label: 'Användare', icon: Users, count: users.length },
             { key: 'blocked', label: 'Blockerade', icon: Ban, count: blockedEmails.length },
-            { key: 'warnings', label: 'Varningar', icon: AlertTriangle, count: 0 },
+            { key: 'warnings', label: 'Varningar', icon: AlertTriangle, count: warningsNeedingReview },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -185,6 +226,23 @@ export const AdminDashboardInner: React.FC<{
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{app.createdAt?.split('T')[0]}</span>
                         </div>
                         <div className="mt-3 space-y-2">
+                          {app.exampleImageUrl && (
+                            <div>
+                              <p className="text-[11px] font-bold text-zinc-500 uppercase mb-2">Exempelbild</p>
+                              <a
+                                href={app.exampleImageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block max-w-xs overflow-hidden rounded-xl border border-zinc-700"
+                              >
+                                <img
+                                  src={app.exampleImageUrl}
+                                  alt="Exempel"
+                                  className="max-h-48 w-full object-cover"
+                                />
+                              </a>
+                            </div>
+                          )}
                           <div>
                             <p className="text-[11px] font-bold text-zinc-500 uppercase">Erfarenhet</p>
                             <p className="text-sm text-zinc-300 mt-0.5">{app.experience}</p>
@@ -231,6 +289,35 @@ export const AdminDashboardInner: React.FC<{
 
           {activeTab === 'users' && (
             <div>
+              <div className="mb-6 rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-purple-400" />
+                  <h3 className="text-sm font-bold text-white">{t('adminBroadcastTitle')}</h3>
+                </div>
+                <p className="mb-3 text-xs text-zinc-400">{t('adminBroadcastHint')}</p>
+                <textarea
+                  value={broadcastMessage}
+                  onChange={e => setBroadcastMessage(e.target.value)}
+                  placeholder={t('adminBroadcastPlaceholder')}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-zinc-700 bg-zinc-950 p-3 text-sm text-white focus:border-purple-500/50 focus:outline-none"
+                />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBroadcastWarning}
+                    disabled={broadcastLoading || !broadcastMessage.trim()}
+                    className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-purple-500 disabled:opacity-50"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {broadcastLoading ? t('adminBroadcastSending') : t('adminBroadcastSend')}
+                  </button>
+                  {broadcastResult && (
+                    <p className="text-xs text-zinc-400">{broadcastResult}</p>
+                  )}
+                </div>
+              </div>
+
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                 <input
@@ -267,9 +354,16 @@ export const AdminDashboardInner: React.FC<{
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
+                          onClick={() => handleViewProfile(u.uid)}
+                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-purple-400 transition"
+                          title={t('adminViewProfile')}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => { setWarningTarget(u); setShowWarningModal(true); }}
                           className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-amber-400 transition"
-                          title="Skicka varning"
+                          title={t('adminSendWarning')}
                         >
                           <AlertTriangle className="w-3.5 h-3.5" />
                         </button>
@@ -343,15 +437,38 @@ export const AdminDashboardInner: React.FC<{
                             <p className="text-sm text-zinc-300">{w.message}</p>
                             <span className="text-[10px] text-zinc-600 shrink-0">{w.createdAt.split('T')[0]}</span>
                           </div>
-                          {w.response ? (
-                            <div className="mt-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                              <p className="text-[11px] font-bold text-emerald-400 uppercase">Svar från {u.displayName}</p>
-                              <p className="text-sm text-zinc-300 mt-1">{w.response}</p>
-                              <p className="text-[10px] text-zinc-600 mt-1">{w.respondedAt?.split('T')[0]}</p>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-zinc-600 mt-1 italic">Inget svar ännu</p>
-                          )}
+                          {(() => {
+                            const r = warningResponseLabel(w);
+                            if (r.tone === 'pending') {
+                              return <p className="mt-2 text-xs italic text-zinc-500">{r.text}</p>;
+                            }
+                            return (
+                              <div
+                                className={`mt-2 rounded-xl border p-3 ${
+                                  r.tone === 'ok'
+                                    ? 'border-emerald-500/20 bg-emerald-500/10'
+                                    : r.tone === 'no'
+                                      ? 'border-red-500/20 bg-red-500/10'
+                                      : 'border-zinc-700 bg-zinc-800/50'
+                                }`}
+                              >
+                                <p
+                                  className={`text-[11px] font-bold uppercase ${
+                                    r.tone === 'ok'
+                                      ? 'text-emerald-400'
+                                      : r.tone === 'no'
+                                        ? 'text-red-400'
+                                        : 'text-zinc-400'
+                                  }`}
+                                >
+                                  {u.displayName}: {r.text}
+                                </p>
+                                {w.respondedAt && (
+                                  <p className="mt-1 text-[10px] text-zinc-600">{w.respondedAt.split('T')[0]}</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>

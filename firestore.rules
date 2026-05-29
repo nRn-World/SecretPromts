@@ -30,9 +30,14 @@ service cloud.firestore {
     }
 
     match /applications/{applicationId} {
-      allow create: if true;
-      allow read, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.exampleImageUrl is string
+        && request.resource.data.exampleImageUrl.size() > 0
+        && request.resource.data.status == 'pending';
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isAdmin();
     }
 
     match /blocked/{blockedId} {

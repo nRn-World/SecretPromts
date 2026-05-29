@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import app from './config';
 import type { PromptItem } from '../data/initialPrompts';
+import { addMonths } from '../utils/authorApplication';
 
 export const db = getFirestore(app);
 
@@ -28,11 +29,15 @@ export interface UserNotification {
   read: boolean;
 }
 
+export type WarningResponse = 'accepted' | 'rejected';
+
 export interface Warning {
   id: string;
   message: string;
   createdAt: string;
-  response?: string;
+  /** User accepted or rejected the admin message */
+  response?: WarningResponse;
+  responseNote?: string;
   respondedAt?: string;
 }
 
@@ -51,6 +56,8 @@ export interface UserProfile {
   authorExpiresAt?: string | null;
   isBlocked?: boolean;
   warnings?: Warning[];
+  authorApplicationCooldownUntil?: string | null;
+  lastAuthorApplicationAt?: string | null;
   createdAt: string;
 }
 
@@ -62,11 +69,26 @@ export interface AuthorApplication {
   portfolioUrl: string;
   experience: string;
   motivation: string;
+  exampleImageUrl: string;
   status: 'pending' | 'accepted' | 'rejected';
   authorPeriod?: '1month' | '5months' | '1year' | 'forever';
   adminNote?: string;
   createdAt: string;
   reviewedAt?: string | null;
+}
+
+export type AuthorApplicationBlockReason =
+  | 'blocked'
+  | 'guest'
+  | 'pending'
+  | 'cooldown'
+  | 'monthly'
+  | 'is_author';
+
+export interface AuthorApplicationEligibility {
+  canApply: boolean;
+  nextAllowedAt?: string;
+  reason?: AuthorApplicationBlockReason;
 }
 
 export const ensureUserProfile = async (uid: string, displayName: string, email?: string, photoURL?: string) => {
@@ -88,6 +110,8 @@ export const ensureUserProfile = async (uid: string, displayName: string, email?
       authorExpiresAt: null,
       isBlocked: false,
       warnings: [],
+      authorApplicationCooldownUntil: null,
+      lastAuthorApplicationAt: null,
       createdAt: new Date().toISOString(),
     };
     await setDoc(ref, profile);
@@ -307,12 +331,87 @@ export const toggleLike = async (
 
 // ─── Applications ──────────────────────────────────────────────────────────────
 
+const latestApplicationForUid = async (uid: string): Promise<AuthorApplication[]> => {
+  const q = query(collection(db, APPLICATIONS_COL), where('uid', '==', uid));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ ...d.data(), id: d.id } as AuthorApplication))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
+export const checkAuthorApplicationEligibility = async (
+  uid: string,
+  email: string
+): Promise<AuthorApplicationEligibility> => {
+  if (!uid) return { canApply: false, reason: 'guest' };
+
+  if (await isEmailBlocked(email)) return { canApply: false, reason: 'blocked' };
+
+  const profile = await getUserProfile(uid);
+  if (profile?.isAuthor) return { canApply: false, reason: 'is_author' };
+
+  const now = Date.now();
+  if (profile?.authorApplicationCooldownUntil) {
+    const untilMs = new Date(profile.authorApplicationCooldownUntil).getTime();
+    if (untilMs > now) {
+      return {
+        canApply: false,
+        reason: 'cooldown',
+        nextAllowedAt: profile.authorApplicationCooldownUntil,
+      };
+    }
+  }
+
+  const apps = await latestApplicationForUid(uid);
+  const pending = apps.find(a => a.status === 'pending');
+  if (pending) return { canApply: false, reason: 'pending' };
+
+  const last = apps[0];
+  if (last?.createdAt) {
+    const nextFromLast = addMonths(new Date(last.createdAt), 1);
+    if (nextFromLast.getTime() > now) {
+      const nextAllowedAt = nextFromLast.toISOString();
+      const profileCooldown = profile?.authorApplicationCooldownUntil
+        ? new Date(profile.authorApplicationCooldownUntil).getTime()
+        : 0;
+      const effective =
+        profileCooldown > nextFromLast.getTime()
+          ? profile!.authorApplicationCooldownUntil!
+          : nextAllowedAt;
+      return {
+        canApply: false,
+        reason: last.status === 'rejected' ? 'cooldown' : 'monthly',
+        nextAllowedAt: effective,
+      };
+    }
+  }
+
+  return { canApply: true };
+};
+
 export const submitApplication = async (data: Omit<AuthorApplication, 'id' | 'createdAt'>) => {
+  if (!data.uid) throw new Error('LOGIN_REQUIRED');
+  if (!data.exampleImageUrl?.trim()) throw new Error('IMAGE_REQUIRED');
+
+  const eligibility = await checkAuthorApplicationEligibility(data.uid, data.contactEmail);
+  if (!eligibility.canApply) {
+    const err = new Error(eligibility.reason || 'NOT_ELIGIBLE');
+    (err as Error & { eligibility: AuthorApplicationEligibility }).eligibility = eligibility;
+    throw err;
+  }
+
+  const createdAt = new Date().toISOString();
   const ref = await addDoc(collection(db, APPLICATIONS_COL), {
     ...data,
-    createdAt: new Date().toISOString(),
+    exampleImageUrl: data.exampleImageUrl.trim(),
+    createdAt,
     reviewedAt: null,
   });
+
+  await updateDoc(doc(db, USERS_COL, data.uid), {
+    lastAuthorApplicationAt: createdAt,
+  });
+
   return ref.id;
 };
 
@@ -374,6 +473,7 @@ export const updateApplicationStatus = async (
     await updateDoc(doc(db, USERS_COL, uid), {
       isAuthor: true,
       authorExpiresAt: expiresAt,
+      authorApplicationCooldownUntil: null,
       notifications: arrayUnion({
         id: Math.random().toString(36).substr(2, 9),
         type: 'author_granted' as const,
@@ -381,6 +481,13 @@ export const updateApplicationStatus = async (
         createdAt: new Date().toISOString(),
         read: false,
       }),
+    });
+  }
+
+  if (status === 'rejected' && uid) {
+    const cooldownUntil = addMonths(new Date(), 1).toISOString();
+    await updateDoc(doc(db, USERS_COL, uid), {
+      authorApplicationCooldownUntil: cooldownUntil,
     });
   }
 };
@@ -429,16 +536,18 @@ export const subscribeAllUsers = (cb: (users: UserProfile[]) => void) =>
 
 // ─── Warnings ──────────────────────────────────────────────────────────────────
 
+const buildWarning = (message: string): Warning => ({
+  id: Math.random().toString(36).slice(2, 11),
+  message,
+  createdAt: new Date().toISOString(),
+});
+
 export const sendWarning = async (uid: string, message: string) => {
-  const warning: Warning = {
-    id: Math.random().toString(36).substr(2, 9),
-    message,
-    createdAt: new Date().toISOString(),
-  };
+  const warning = buildWarning(message);
   await updateDoc(doc(db, USERS_COL, uid), {
     warnings: arrayUnion(warning),
     notifications: arrayUnion({
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       type: 'warning' as const,
       fromName: 'Admin',
       createdAt: new Date().toISOString(),
@@ -447,24 +556,59 @@ export const sendWarning = async (uid: string, message: string) => {
   });
 };
 
-export const respondToWarning = async (uid: string, warningId: string, response: string) => {
+/** Send the same admin message as a warning to every registered user profile. */
+export const sendWarningToAllUsers = async (message: string): Promise<number> => {
+  const snap = await getDocs(collection(db, USERS_COL));
+  const trimmed = message.trim();
+  if (!trimmed) return 0;
+
+  let count = 0;
+  const chunkSize = 400;
+  for (let i = 0; i < snap.docs.length; i += chunkSize) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + chunkSize).forEach((userDoc) => {
+      const warning = buildWarning(trimmed);
+      batch.update(userDoc.ref, {
+        warnings: arrayUnion(warning),
+        notifications: arrayUnion({
+          id: Math.random().toString(36).slice(2, 11),
+          type: 'warning' as const,
+          fromName: 'Admin',
+          createdAt: new Date().toISOString(),
+          read: false,
+        }),
+      });
+      count += 1;
+    });
+    await batch.commit();
+  }
+  return count;
+};
+
+export const respondToWarning = async (
+  uid: string,
+  warningId: string,
+  accepted: boolean,
+  note?: string
+) => {
   const snap = await getDoc(doc(db, USERS_COL, uid));
   const profile = snap.data() as UserProfile | undefined;
   if (!profile?.warnings) return;
+
+  const already = profile.warnings.find(w => w.id === warningId);
+  if (already?.response) return;
+
   const updatedWarnings = profile.warnings.map(w =>
-    w.id === warningId ? { ...w, response, respondedAt: new Date().toISOString() } : w
+    w.id === warningId
+      ? {
+          ...w,
+          response: (accepted ? 'accepted' : 'rejected') as WarningResponse,
+          responseNote: note?.trim() || '',
+          respondedAt: new Date().toISOString(),
+        }
+      : w
   );
   await updateDoc(doc(db, USERS_COL, uid), { warnings: updatedWarnings });
-  // Notify admin
-  await updateDoc(doc(db, USERS_COL, uid), {
-    notifications: arrayUnion({
-      id: Math.random().toString(36).substr(2, 9),
-      type: 'warning_response' as const,
-      fromName: profile.displayName,
-      createdAt: new Date().toISOString(),
-      read: false,
-    }),
-  });
 };
 
 // ─── Admin ────────────────────────────────────────────────────────────────────

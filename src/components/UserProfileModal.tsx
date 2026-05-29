@@ -195,7 +195,7 @@ const UserProfileModalInner: React.FC<{ selectedProfileUid: string }> = ({ selec
 
   return (
     <div
-      className="fixed inset-0 z-[60] overflow-y-auto bg-zinc-950/95 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+      className="fixed inset-0 z-[110] overflow-y-auto bg-zinc-950/95 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6 animate-fade-in"
       onClick={closeUserProfile}
     >
       <div
