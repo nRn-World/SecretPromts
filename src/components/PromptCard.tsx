@@ -18,34 +18,48 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Deterministic random from prompt.id for consistent per-card randomness
-  const seed = prompt.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const rand = (min: number, max: number) => min + (seed % (max - min + 1));
+  // True random values per card mount (useRef so they don't change on re-render)
+  const cardRand = useRef({
+    intervalMs: 3200 + Math.random() * 1800,
+    initialDelay: Math.random() * 3500,
+    variantIdx: Math.floor(Math.random() * 5),
+  }).current;
 
   const variants = [
-    { duration: 1000, easing: 'ease-in-out', outClass: 'opacity-0 scale-95', inClass: 'opacity-100 scale-100' },
-    { duration: 1200, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', outClass: 'opacity-0 translate-y-2 scale-[0.97] blur-[1px]', inClass: 'opacity-100 translate-y-0 scale-100 blur-0' },
-    { duration: 800, easing: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)', outClass: 'opacity-0 -translate-x-3 scale-95', inClass: 'opacity-100 translate-x-0 scale-100' },
-    { duration: 900, easing: 'ease-out', outClass: 'opacity-0 rotate-[2deg] scale-[0.96]', inClass: 'opacity-100 rotate-0 scale-100' },
-    { duration: 1100, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', outClass: 'opacity-0 scale-[1.05]', inClass: 'opacity-100 scale-100' },
+    { out: { opacity: 0, scale: 0.95 }, in: { opacity: 1, scale: 1 }, duration: 1000, easing: 'ease-in-out' },
+    { out: { opacity: 0, scale: 0.97, y: 2 }, in: { opacity: 1, scale: 1, y: 0 }, duration: 1200, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' },
+    { out: { opacity: 0, scale: 0.95, x: -3 }, in: { opacity: 1, scale: 1, x: 0 }, duration: 800, easing: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)' },
+    { out: { opacity: 0, scale: 0.96, rotate: 2 }, in: { opacity: 1, scale: 1, rotate: 0 }, duration: 900, easing: 'ease-out' },
+    { out: { opacity: 0, scale: 1.05 }, in: { opacity: 1, scale: 1 }, duration: 1100, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' },
   ];
-  const variantIdx = seed % variants.length;
-  const variant = variants[variantIdx];
-  const intervalMs = rand(3200, 5000);
-  const initialDelay = seed % 3500;
+  const variant = variants[cardRand.variantIdx];
+
+  const imgStyle = (isVisible: boolean): React.CSSProperties => {
+    const v = isVisible ? variant.in : variant.out;
+    const t: React.CSSProperties = {
+      opacity: v.opacity,
+      transitionDuration: `${variant.duration}ms`,
+      transitionTimingFunction: variant.easing,
+    };
+    t.transform = `scale(${v.scale})`;
+    if ('x' in v && v.x !== undefined) t.transform += ` translateX(${v.x}px)`;
+    if ('y' in v && v.y !== undefined) t.transform += ` translateY(${v.y}px)`;
+    if ('rotate' in v && v.rotate !== undefined) t.transform += ` rotate(${v.rotate}deg)`;
+    return t;
+  };
 
   useEffect(() => {
     if (promptImages.length <= 1) return;
     const startTimeout = setTimeout(() => {
       intervalRef.current = setInterval(() => {
         setVisibleIdx(prev => (prev + 1) % promptImages.length);
-      }, intervalMs);
-    }, initialDelay);
+      }, cardRand.intervalMs);
+    }, cardRand.initialDelay);
     return () => {
       clearTimeout(startTimeout);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [promptImages.length, intervalMs, initialDelay]);
+  }, [promptImages.length, cardRand.intervalMs, cardRand.initialDelay]);
 
   // Reset when prompt changes
   useEffect(() => {
@@ -79,8 +93,8 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
             key={i}
             src={url}
             alt={displayTitle}
-            className={`absolute inset-0 w-full h-full object-contain transition-all ${i === visibleIdx ? variant.inClass : variant.outClass}`}
-            style={{ zIndex: promptImages.length - i, transitionDuration: `${variant.duration}ms`, transitionTimingFunction: variant.easing }}
+            className="absolute inset-0 w-full h-full object-contain transition-all"
+            style={{ ...imgStyle(i === visibleIdx), zIndex: promptImages.length - i }}
             loading="lazy"
           />
         ))}
