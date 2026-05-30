@@ -18,7 +18,7 @@ export const PromptDetailModal: React.FC = () => {
 const PromptDetailModalInner: React.FC<{ prompt: PromptItem }> = ({ prompt }) => {
   const { setSelectedPromptForDetail, toggleFavorite, toggleLike, openUserProfile } = usePrompts();
   const { t, categoryLabel, promptTitle, promptDescription, tagLabel } = useLanguage();
-  const { isGuest, user } = useAuth();
+  const { isGuest, user, setIsAuthModalOpen } = useAuth();
 
   // Local state for customized variables
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});

@@ -40,7 +40,7 @@ export const AuthorApplication: React.FC = () => {
   }, [user.displayName, user.email]);
 
   useEffect(() => {
-    if (isGuest || isAdmin || !user.id) {
+    if (isGuest || !user.id) {
       setEligibility(null);
       return;
     }
@@ -148,7 +148,7 @@ export const AuthorApplication: React.FC = () => {
     }
   };
 
-  const blockedFromApplying = eligibility && !eligibility.canApply && !isGuest;
+  const blockedFromApplying = !isAdmin && eligibility && !eligibility.canApply && !isGuest;
 
   if (isDismissed) {
     return (

@@ -360,6 +360,12 @@ export const checkAuthorApplicationEligibility = async (
 
   if (await isEmailBlocked(email)) return { canApply: false, reason: 'blocked' };
 
+  // Admin users can always apply
+  const adminEmail = (await getAdminEmail()) || '';
+  if (email && adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) {
+    return { canApply: true };
+  }
+
   const profile = await getUserProfile(uid);
   if (profile?.isAuthor) return { canApply: false, reason: 'is_author' };
 
