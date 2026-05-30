@@ -113,6 +113,9 @@ const PromptDetailModalInner: React.FC<{ prompt: PromptItem }> = ({ prompt }) =>
     navigator.clipboard.writeText(customizedPromptText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    if (!prompt.isLiked && !isGuest) {
+      toggleLike(prompt.id);
+    }
   };
 
   const handleVariableChange = (name: string, value: string) => {
