@@ -18,15 +18,34 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Deterministic random from prompt.id for consistent per-card randomness
+  const seed = prompt.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rand = (min: number, max: number) => min + (seed % (max - min + 1));
+
+  const variants = [
+    { duration: 1000, easing: 'ease-in-out', outClass: 'opacity-0 scale-95', inClass: 'opacity-100 scale-100' },
+    { duration: 1200, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', outClass: 'opacity-0 translate-y-2 scale-[0.97] blur-[1px]', inClass: 'opacity-100 translate-y-0 scale-100 blur-0' },
+    { duration: 800, easing: 'cubic-bezier(0.68, -0.55, 0.27, 1.55)', outClass: 'opacity-0 -translate-x-3 scale-95', inClass: 'opacity-100 translate-x-0 scale-100' },
+    { duration: 900, easing: 'ease-out', outClass: 'opacity-0 rotate-[2deg] scale-[0.96]', inClass: 'opacity-100 rotate-0 scale-100' },
+    { duration: 1100, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', outClass: 'opacity-0 scale-[1.05]', inClass: 'opacity-100 scale-100' },
+  ];
+  const variantIdx = seed % variants.length;
+  const variant = variants[variantIdx];
+  const intervalMs = rand(3200, 5000);
+  const initialDelay = seed % 3500;
+
   useEffect(() => {
     if (promptImages.length <= 1) return;
-    intervalRef.current = setInterval(() => {
-      setVisibleIdx(prev => (prev + 1) % promptImages.length);
-    }, 3500);
+    const startTimeout = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        setVisibleIdx(prev => (prev + 1) % promptImages.length);
+      }, intervalMs);
+    }, initialDelay);
     return () => {
+      clearTimeout(startTimeout);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [promptImages.length]);
+  }, [promptImages.length, intervalMs, initialDelay]);
 
   // Reset when prompt changes
   useEffect(() => {
@@ -60,10 +79,8 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
             key={i}
             src={url}
             alt={displayTitle}
-            className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ease-in-out ${
-              i === visibleIdx ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-            }`}
-            style={{ zIndex: promptImages.length - i }}
+            className={`absolute inset-0 w-full h-full object-contain transition-all ${i === visibleIdx ? variant.inClass : variant.outClass}`}
+            style={{ zIndex: promptImages.length - i, transitionDuration: `${variant.duration}ms`, transitionTimingFunction: variant.easing }}
             loading="lazy"
           />
         ))}
