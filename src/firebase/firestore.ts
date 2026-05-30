@@ -357,54 +357,9 @@ export const checkAuthorApplicationEligibility = async (
   email: string
 ): Promise<AuthorApplicationEligibility> => {
   if (!uid) return { canApply: false, reason: 'guest' };
-
   if (await isEmailBlocked(email)) return { canApply: false, reason: 'blocked' };
-
-  // Admin users can always apply
-  const adminEmail = (await getAdminEmail()) || '';
-  if (email && adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) {
-    return { canApply: true };
-  }
-
   const profile = await getUserProfile(uid);
   if (profile?.isAuthor) return { canApply: false, reason: 'is_author' };
-
-  const now = Date.now();
-  if (profile?.authorApplicationCooldownUntil) {
-    const untilMs = new Date(profile.authorApplicationCooldownUntil).getTime();
-    if (untilMs > now) {
-      return {
-        canApply: false,
-        reason: 'cooldown',
-        nextAllowedAt: profile.authorApplicationCooldownUntil,
-      };
-    }
-  }
-
-  const apps = await latestApplicationForUid(uid);
-  const pending = apps.find(a => a.status === 'pending');
-  if (pending) return { canApply: false, reason: 'pending' };
-
-  const last = apps[0];
-  if (last?.createdAt) {
-    const nextFromLast = addMonths(new Date(last.createdAt), 1);
-    if (nextFromLast.getTime() > now) {
-      const nextAllowedAt = nextFromLast.toISOString();
-      const profileCooldown = profile?.authorApplicationCooldownUntil
-        ? new Date(profile.authorApplicationCooldownUntil).getTime()
-        : 0;
-      const effective =
-        profileCooldown > nextFromLast.getTime()
-          ? profile!.authorApplicationCooldownUntil!
-          : nextAllowedAt;
-      return {
-        canApply: false,
-        reason: last.status === 'rejected' ? 'cooldown' : 'monthly',
-        nextAllowedAt: effective,
-      };
-    }
-  }
-
   return { canApply: true };
 };
 

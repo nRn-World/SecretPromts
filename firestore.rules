@@ -7,14 +7,18 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/config/admin)
         && request.auth.token.email != null
-        && request.auth.token.email.lower() == get(/databases/$(database)/documents/config/admin).data.email.lower();
+        && request.auth.token.email.lower() == 'bynrnworld@gmail.com';
+    }
+
+    function isAuthor() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAuthor == true;
     }
 
     match /prompts/{promptId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isAuthor();
     }
 
     match /config/{docId} {

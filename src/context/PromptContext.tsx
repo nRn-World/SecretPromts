@@ -45,6 +45,7 @@ interface PromptContextType {
   setSelectedPromptForDetail: (prompt: PromptItem | null) => void;
 
   isAdmin: boolean;
+  isAuthor: boolean;
   loginAdmin: (password: string) => boolean;
   logoutAdmin: () => void;
 
@@ -72,7 +73,7 @@ interface PromptContextType {
 const PromptContext = createContext<PromptContextType | undefined>(undefined);
 
 export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isAuthor } = useAuth();
 
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
   const [categories, setCategoriesState] = useState<string[]>([]);
@@ -290,7 +291,7 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const filteredPrompts = useMemo(() => {
     return prompts.filter(p => {
       if (activeTab === 'favorites' && !p.isFavorite) return false;
-      if (activeTab === 'my-creations' && !p.isCustom) return false;
+      if (activeTab === 'my-creations' && (!p.isCustom || (p.authorId && p.authorId !== user.id))) return false;
       if (selectedCategory !== 'Alla' && p.category !== selectedCategory) return false;
       if (selectedModel !== 'Alla' && p.model !== selectedModel) return false;
       if (selectedTag !== 'Alla' && !p.tags.includes(selectedTag)) return false;
@@ -359,7 +360,7 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         filteredPrompts, allTags, exportPrompts, importPrompts,
         isCreateModalOpen, setIsCreateModalOpen,
         selectedPromptForDetail, setSelectedPromptForDetail,
-        isAdmin, loginAdmin, logoutAdmin,
+        isAdmin, isAuthor, loginAdmin, logoutAdmin,
         categories, addCategory, editCategory, deleteCategory,
         editingPrompt, setEditingPrompt,
         isManageCategoriesOpen, setIsManageCategoriesOpen,

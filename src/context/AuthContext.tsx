@@ -7,6 +7,7 @@ interface AuthContextType {
   user: AuthUser;
   isGuest: boolean;
   isAdmin: boolean;
+  isAuthor: boolean;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (isOpen: boolean) => void;
   createAccount: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
@@ -24,6 +25,7 @@ export interface AuthUser {
   displayName: string;
   isGuest: boolean;
   isAdmin: boolean;
+  isAuthor: boolean;
 }
 
 const guestUser: AuthUser = {
@@ -32,6 +34,7 @@ const guestUser: AuthUser = {
   displayName: 'Guest',
   isGuest: true,
   isAdmin: false,
+  isAuthor: false,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [adminEmail, setAdminEmailState] = useState<string | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isAuthorState, setIsAuthorState] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (profile?.isBlocked) {
           setIsBlocked(true);
         }
+        setIsAuthorState(!!profile?.isAuthor);
       }
     });
     return unsub;
@@ -82,9 +87,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: firebaseUser.email || '',
       displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
       isGuest: false,
-      isAdmin: !!adminEmail && firebaseUser.email?.toLowerCase() === adminEmail.toLowerCase(),
+      isAdmin: firebaseUser.email?.toLowerCase() === 'bynrnworld@gmail.com',
+      isAuthor: isAuthorState,
     };
-  }, [firebaseUser, adminEmail, isBlocked]);
+  }, [firebaseUser, adminEmail, isBlocked, isAuthorState]);
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
@@ -134,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAsAdmin = async (email: string, password: string) => {
+    if (email.toLowerCase() !== 'bynrnworld@gmail.com') return { ok: false, message: 'Endast bynrnworld@gmail.com kan vara admin.' };
     try {
       await fbSignIn(email, password);
       await setAdminEmail(email);
@@ -149,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUpAdmin = async (email: string, password: string, _displayName: string) => {
+    if (email.toLowerCase() !== 'bynrnworld@gmail.com') return { ok: false, message: 'Endast bynrnworld@gmail.com kan vara admin.' };
     try {
       const cred = await fbSignUp(email, password);
       if (cred.user) {
@@ -186,6 +194,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     isGuest: user.isGuest,
     isAdmin: user.isAdmin,
+    isAuthor: user.isAuthor,
     isAuthModalOpen,
     setIsAuthModalOpen,
     createAccount,

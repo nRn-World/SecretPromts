@@ -25,6 +25,7 @@ export const Header: React.FC = () => {
     setIsCreateModalOpen, 
     prompts,
     isAdmin,
+    isAuthor,
     openUserProfile
   } = usePrompts();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -250,7 +251,7 @@ export const Header: React.FC = () => {
                   <LogOut className="h-3.5 w-3.5" />
                 </button>
               )}
-              {isAdmin && (
+            {isAdmin && (
                 <button
                   onClick={() => setShowAdminPanel(true)}
                   className="relative flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition"
@@ -281,7 +282,7 @@ export const Header: React.FC = () => {
               </a>
             )}
 
-            {isAdmin && (
+            {(isAdmin || isAuthor) && (
               <button
                 onClick={() => setIsCreateModalOpen(true)}
                 className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-pink-600 hover:from-amber-400 hover:to-pink-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-pink-500/20 transition-all active:scale-95"
