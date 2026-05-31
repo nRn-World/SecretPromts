@@ -211,8 +211,8 @@ export const Header: React.FC = () => {
                             </div>
                             <div className="text-xs text-zinc-300">
                               {n.type === 'like' ? (
-                                <><span className="font-bold text-white">{n.fromName}</span> gillade din prompt "{n.promptTitle}".</>
-                              ) : n.type === 'warning' ? (
+                                 <>{n.fromUid ? <button type="button" onClick={() => { setIsNotifOpen(false); openUserProfile(n.fromUid); }} className="font-bold text-white hover:text-purple-400 transition-colors">{n.fromName}</button> : <span className="font-bold text-white">{n.fromName}</span>} gillade din prompt "{n.promptTitle}".</>
+                               ) : n.type === 'warning' ? (
                                 <span><span className="font-bold text-amber-400">Varning!</span> Admin har skickat ett meddelande till dig. <span className="text-purple-400">Klicka för att läsa.</span></span>
                               ) : n.type === 'admin_news' ? (
                                 <span><span className="font-bold text-purple-300">{t('adminNewsNotifTitle')}</span> {t('adminNewsNotifBody')} <span className="text-purple-400">Klicka för att läsa.</span></span>

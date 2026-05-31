@@ -247,7 +247,8 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         wasLiked, 
         prompt?.authorId, 
         prompt?.title, 
-        user.displayName
+        user.displayName,
+        user.id
       );
     }
   };

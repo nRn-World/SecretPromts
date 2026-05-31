@@ -306,7 +306,8 @@ export const toggleLike = async (
   isLiked: boolean, 
   authorId?: string, 
   promptTitle?: string, 
-  likerName?: string
+  likerName?: string,
+  fromUid?: string
 ) => {
   try {
     const ref = doc(db, PROMPTS_COL, promptId);
@@ -325,6 +326,7 @@ export const toggleLike = async (
         const notif: UserNotification = {
           id: Math.random().toString(36).substr(2, 9),
           type: 'like',
+          fromUid,
           fromName: likerName || userEmail.split('@')[0],
           promptTitle: promptTitle || 'en prompt',
           createdAt: new Date().toISOString(),
