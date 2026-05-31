@@ -272,7 +272,7 @@ export const Header: React.FC = () => {
               )}
             </div>
 
-            {!isAdmin && (
+            {!isAdmin && !isAuthor && (
               <a
                 href="#become-author"
                 className="hidden lg:flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-3.5 py-2.5 text-xs font-bold text-purple-300 transition-colors hover:bg-purple-500/20 hover:text-white"
