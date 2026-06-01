@@ -16,6 +16,7 @@ import { AuthorApplication } from './components/AuthorApplication';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { UserProfileModal } from './components/UserProfileModal';
+import { ParticleBackground } from './components/ParticleBackground';
 import { useAuth } from './context/AuthContext';
 import { ensureUserProfile } from './firebase/firestore';
 
@@ -35,6 +36,9 @@ export default function App() {
       <AuthProvider>
         <PromptProvider>
           <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-400 selection:text-zinc-950">
+
+            {/* Particle background */}
+            <ParticleBackground />
 
             {/* Sync logged-in user to Firestore */}
             <UserProfileSync />
