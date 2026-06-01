@@ -15,7 +15,7 @@ export const Marquee: React.FC = () => {
   const tickerItems = [...validPrompts, ...validPrompts, ...validPrompts, ...validPrompts];
 
   return (
-    <div className="relative w-full overflow-hidden bg-zinc-950 py-4 border-b border-zinc-800/40">
+    <div className="relative w-full overflow-hidden bg-zinc-950 py-6 mt-6 border-b border-zinc-800/40">
       
       {/* Ticker Container */}
       <div className="animate-marquee flex gap-4">
@@ -26,7 +26,7 @@ export const Marquee: React.FC = () => {
             <div
               key={`${prompt.id}-${index}`}
               onClick={() => setSelectedPromptForDetail(prompt)}
-              className="relative flex-shrink-0 w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden cursor-pointer group bg-zinc-950 border border-zinc-800/40 transition-transform duration-300 hover:scale-105 hover:z-10"
+              className="relative flex-shrink-0 w-40 h-40 sm:w-52 sm:h-52 rounded-xl overflow-hidden cursor-pointer group bg-zinc-950 border border-zinc-800/40 transition-transform duration-300 hover:scale-105 hover:z-10"
               title={title}
             >
               <img

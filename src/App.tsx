@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { PromptProvider } from './context/PromptContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider } from './context/AuthContext';
+
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
-import { Marquee } from './components/Marquee';
 import { Filters } from './components/Filters';
 import { PromptGrid } from './components/PromptGrid';
 import { CreatePromptModal } from './components/CreatePromptModal';
@@ -17,8 +17,10 @@ import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { UserProfileModal } from './components/UserProfileModal';
 import { ParticleBackground } from './components/ParticleBackground';
+import { ToastContainer } from './components/Toast';
 import { useAuth } from './context/AuthContext';
 import { ensureUserProfile } from './firebase/firestore';
+
 
 /** Syncs Firebase Auth user → Firestore users/{uid} on login */
 function UserProfileSync() {
@@ -49,7 +51,6 @@ export default function App() {
             {/* Main interactive content */}
             <main className="flex-1">
               <Hero />
-              <Marquee />
               <Filters />
               <PromptGrid />
               <AuthorApplication />
@@ -63,6 +64,7 @@ export default function App() {
             <ManageCategoriesModal />
             <EditPromptModal />
             <UserProfileModal />
+            <ToastContainer />
 
             {/* Professional Footer */}
             <Footer />
@@ -70,6 +72,6 @@ export default function App() {
           </div>
         </PromptProvider>
       </AuthProvider>
-    </LanguageProvider>
+      </LanguageProvider>
   );
 }
