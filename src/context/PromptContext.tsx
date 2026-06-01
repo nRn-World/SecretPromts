@@ -26,14 +26,17 @@ interface PromptContextType {
   setSelectedModel: (model: string) => void;
   selectedTag: string;
   setSelectedTag: (tag: string) => void;
-  sortBy: 'newest' | 'oldest' | 'title' | 'popular' | 'likes';
-  setSortBy: (sort: 'newest' | 'oldest' | 'title' | 'popular' | 'likes') => void;
+  sortBy: 'likes' | 'favorites' | 'newest' | 'top-users';
+  setSortBy: (sort: 'likes' | 'favorites' | 'newest' | 'top-users') => void;
 
   activeTab: 'all' | 'favorites' | 'my-creations';
   setActiveTab: (tab: 'all' | 'favorites' | 'my-creations') => void;
 
   filteredPrompts: PromptItem[];
   allTags: string[];
+  totalPrompts: number;
+  totalAuthors: number;
+  totalLikes: number;
 
   exportPrompts: () => void;
   importPrompts: (jsonString: string) => boolean;
@@ -76,7 +79,7 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { user, isAdmin, isAuthor } = useAuth();
 
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
-  const [categories, setCategoriesState] = useState<string[]>([]);
+  const [categories, setCategoriesState] = useState<string[]>([...INITIAL_CATEGORIES]);
   const [localFavorites, setLocalFavorites] = useState<Set<string>>(new Set());
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
 
@@ -84,7 +87,7 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [selectedCategory, setSelectedCategory] = useState('Alla');
   const [selectedModel, setSelectedModel] = useState('Alla');
   const [selectedTag, setSelectedTag] = useState('Alla');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title' | 'popular' | 'likes'>('newest');
+  const [sortBy, setSortBy] = useState<'likes' | 'favorites' | 'newest' | 'top-users'>('newest');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'my-creations'>('all');
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -118,7 +121,10 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const unsub = subscribeCategories((list) => {
-      setCategoriesState(list);
+      if (list && list.length > 0) {
+        const merged = Array.from(new Set([...INITIAL_CATEGORIES, ...list]));
+        setCategoriesState(merged);
+      }
     });
     return unsub;
   }, []);
@@ -215,6 +221,10 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       return next;
     });
+    // Track favoritesCount for sorting
+    setPrompts(prev => prev.map(p =>
+      p.id === id ? { ...p, isFavorite: !p.isFavorite, favoritesCount: (p.favoritesCount ?? 0) + (p.isFavorite ? -1 : 1) } : p
+    ));
   };
 
   const toggleLike = (id: string) => {
@@ -289,6 +299,21 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return Array.from(tagsSet).sort();
   }, [prompts]);
 
+  const totalPrompts = prompts.length;
+  const totalAuthors = useMemo(() => {
+    const authors = new Set(prompts.filter(p => p.authorId).map(p => p.authorId));
+    return authors.size;
+  }, [prompts]);
+  const totalLikes = useMemo(() => {
+    return prompts.reduce((sum, p) => sum + (p.likesCount || 0), 0);
+  }, [prompts]);
+
+  const authorPromptCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    prompts.forEach(p => { if (p.authorId) counts[p.authorId] = (counts[p.authorId] || 0) + 1; });
+    return counts;
+  }, [prompts]);
+
   const filteredPrompts = useMemo(() => {
     return prompts.filter(p => {
       if (activeTab === 'favorites' && !p.isFavorite) return false;
@@ -309,10 +334,15 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return true;
     }).sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      else if (sortBy === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      else if (sortBy === 'popular') return (b.viewCount ?? 0) - (a.viewCount ?? 0);
       else if (sortBy === 'likes') return (b.likesCount ?? 0) - (a.likesCount ?? 0);
-      else return a.title.localeCompare(b.title);
+      else if (sortBy === 'favorites') return (b.favoritesCount ?? 0) - (a.favoritesCount ?? 0);
+      else if (sortBy === 'top-users') {
+        // Sort by how many prompts the author has shared (most prolific user first)
+        const aCount = a.authorId ? (authorPromptCounts[a.authorId] ?? 0) : 0;
+        const bCount = b.authorId ? (authorPromptCounts[b.authorId] ?? 0) : 0;
+        return bCount - aCount;
+      }
+      return 0;
     });
   }, [prompts, searchQuery, selectedCategory, selectedModel, selectedTag, sortBy, activeTab]);
 
@@ -358,7 +388,7 @@ export const PromptProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
         selectedModel, setSelectedModel, selectedTag, setSelectedTag,
         sortBy, setSortBy, activeTab, setActiveTab,
-        filteredPrompts, allTags, exportPrompts, importPrompts,
+        filteredPrompts, allTags, totalPrompts, totalAuthors, totalLikes, exportPrompts, importPrompts,
         isCreateModalOpen, setIsCreateModalOpen,
         selectedPromptForDetail, setSelectedPromptForDetail,
         isAdmin, isAuthor, loginAdmin, logoutAdmin,

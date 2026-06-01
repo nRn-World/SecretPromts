@@ -98,7 +98,7 @@ export const Header: React.FC = () => {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>{t('gallery')}</span>
-              <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.2 rounded-full border border-white/10">
+              <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.5 rounded-full border border-white/10">
                 {prompts.length}
               </span>
             </button>
@@ -129,7 +129,7 @@ export const Header: React.FC = () => {
                 <FolderGit2 className="w-3.5 h-3.5" />
                 <span>{t('myPrompts')}</span>
                 {customCount > 0 && (
-                  <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.2 rounded-full border border-white/10">
+                  <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.5 rounded-full border border-white/10">
                     {customCount}
                   </span>
                 )}
@@ -212,15 +212,15 @@ export const Header: React.FC = () => {
                             <div className="text-xs text-zinc-300">
                               {n.type === 'like' ? (
                                  <>{n.fromUid ? <button type="button" onClick={() => { setIsNotifOpen(false); openUserProfile(n.fromUid); }} className="font-bold text-white hover:text-purple-400 transition-colors">{n.fromName}</button> : <span className="font-bold text-white">{n.fromName}</span>} gillade din prompt "{n.promptTitle}".</>
-                               ) : n.type === 'warning' ? (
-                                <span><span className="font-bold text-amber-400">Varning!</span> Admin har skickat ett meddelande till dig. <span className="text-purple-400">Klicka för att läsa.</span></span>
-                              ) : n.type === 'admin_news' ? (
-                                <span><span className="font-bold text-purple-300">{t('adminNewsNotifTitle')}</span> {t('adminNewsNotifBody')} <span className="text-purple-400">Klicka för att läsa.</span></span>
-                              ) : n.type === 'author_granted' ? (
-                                <span><span className="font-bold text-emerald-400">Grattis!</span> Du har blivit godkänd som skapare!</span>
-                              ) : (
-                                <><span className="font-bold text-white">{n.fromName}</span> {n.type === 'friend_request_accepted' ? 'accepterade din vänförfrågan' : ''}</>
-                              )}
+                                ) : n.type === 'warning' ? (
+                                 <span><span className="font-bold text-amber-400">Varning!</span> Admin har skickat ett meddelande till dig. <span className="text-purple-400">Klicka för att läsa.</span></span>
+                               ) : n.type === 'admin_news' ? (
+                                 <span><span className="font-bold text-purple-300">{t('adminNewsNotifTitle')}</span> {t('adminNewsNotifBody')} <span className="text-purple-400">Klicka för att läsa.</span></span>
+                               ) : n.type === 'author_granted' ? (
+                                 <span><span className="font-bold text-emerald-400">Grattis!</span> Du har blivit godkänd som skapare!</span>
+                               ) : (
+                                 <><span className="font-bold text-white">{n.fromName}</span> {n.type === 'friend_request_accepted' ? 'accepterade din vänförfrågan' : ''}</>
+                               )}
                             </div>
                           </div>
                         ))}
