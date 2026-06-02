@@ -177,7 +177,7 @@ export const Filters: React.FC = () => {
             <span className="text-xs font-bold uppercase tracking-wider">{t('sortBy')}</span>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-6 flex-wrap">
             {SORT_OPTIONS.map(({ key, icon: Icon, gradient, glowColor, border, labelKey }) => {
               const active = sortBy === key;
               return (
