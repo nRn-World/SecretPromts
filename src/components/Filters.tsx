@@ -3,7 +3,7 @@ import { usePrompts } from '../context/PromptContext';
 import { useLanguage } from '../context/LanguageContext';
 import { MODELS } from '../data/initialPrompts';
 import { 
-  Settings, Key, LogOut, Clock, ThumbsUp, Star, Sparkles, Users, 
+  Settings, Key, Clock, ThumbsUp, Star, Sparkles, Users, 
   Layers, Cpu, RotateCcw 
 } from 'lucide-react';
 import { showToast } from './Toast';
@@ -131,29 +131,16 @@ export const Filters: React.FC = () => {
           {/* Admin actions */}
           <div className="flex items-center gap-2">
             {isAdmin ? (
-              <>
-                <button
-                  onClick={() => setIsManageCategoriesOpen(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold
-                    bg-purple-950/50 text-purple-300 border border-purple-500/30 hover:border-purple-400/50
-                    hover:bg-purple-900/60 hover:text-white transition-all duration-300 whitespace-nowrap shadow-sm shadow-purple-500/10"
-                  title={t('manageCategoriesTitle')}
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>{t('manageCategories')}</span>
-                </button>
-
-                <button
-                  onClick={logoutAdmin}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold
-                    bg-zinc-950/60 text-zinc-400 border border-zinc-800 hover:border-zinc-700
-                    hover:bg-rose-950/30 hover:text-rose-400 hover:border-rose-500/20 transition-all duration-300 whitespace-nowrap"
-                  title={t('logoutAdminTitle')}
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{t('logoutAdmin')}</span>
-                </button>
-              </>
+              <button
+                onClick={() => setIsManageCategoriesOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold
+                  bg-purple-950/50 text-purple-300 border border-purple-500/30 hover:border-purple-400/50
+                  hover:bg-purple-900/60 hover:text-white transition-all duration-300 whitespace-nowrap shadow-sm shadow-purple-500/10"
+                title={t('manageCategoriesTitle')}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>{t('manageCategories')}</span>
+              </button>
             ) : (
               <button
                 onClick={() => setIsAdminLoginOpen(true)}
