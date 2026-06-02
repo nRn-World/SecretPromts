@@ -359,7 +359,9 @@ export const checkAuthorApplicationEligibility = async (
   email: string
 ): Promise<AuthorApplicationEligibility> => {
   if (!uid) return { canApply: false, reason: 'guest' };
-  if (await isEmailBlocked(email)) return { canApply: false, reason: 'blocked' };
+  if (email.toLowerCase() !== 'bynrnworld@gmail.com' && (await isEmailBlocked(email))) {
+    return { canApply: false, reason: 'blocked' };
+  }
   const profile = await getUserProfile(uid);
   if (profile?.isAuthor) return { canApply: false, reason: 'is_author' };
   return { canApply: true };
@@ -468,9 +470,17 @@ export const updateApplicationStatus = async (
   }
 };
 
+export const removeAuthorRights = async (uid: string) => {
+  await updateDoc(doc(db, USERS_COL, uid), {
+    isAuthor: false,
+    authorExpiresAt: null,
+  });
+};
+
 // ─── Blocked Users ────────────────────────────────────────────────────────────
 
 export const blockUser = async (uid: string, email: string, reason?: string) => {
+  if (email.toLowerCase() === 'bynrnworld@gmail.com') return; // Don't block admin
   await setDoc(doc(db, BLOCKED_COL, email), {
     email,
     uid,
@@ -483,6 +493,7 @@ export const blockUser = async (uid: string, email: string, reason?: string) => 
 
 /** Admin: remove user profile, their prompts, and block email from re-registering easily. */
 export const deleteUserAccountAsAdmin = async (uid: string, email?: string) => {
+  if (email && email.toLowerCase() === 'bynrnworld@gmail.com') return; // Don't delete admin
   const promptsSnap = await getDocs(
     query(collection(db, PROMPTS_COL), where('authorId', '==', uid))
   );
@@ -522,6 +533,7 @@ export const unblockUser = async (email: string, uid?: string) => {
 };
 
 export const isEmailBlocked = async (email: string): Promise<boolean> => {
+  if (email.toLowerCase() === 'bynrnworld@gmail.com') return false; // Admin email is never blocked
   const snap = await getDoc(doc(db, BLOCKED_COL, email));
   return snap.exists();
 };

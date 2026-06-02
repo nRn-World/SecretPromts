@@ -53,6 +53,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) {
         setLoading(false);
         setIsBlocked(false);
+      } else if (user.email?.toLowerCase() === 'bynrnworld@gmail.com') {
+        // Admin email is never blocked
+        setIsBlocked(false);
+        const profile = await getUserProfile(user.uid);
+        setIsAuthorState(!!profile?.isAuthor);
+        setLoading(false);
       } else {
         // Check if email is blocked
         const emailBlocked = await isEmailBlocked(user.email || '');
@@ -94,8 +100,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
-      const blocked = await isEmailBlocked(email);
-      if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const blocked = await isEmailBlocked(email);
+        if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
       const cred = await fbSignUp(email, password);
       if (cred.user) {
         setIsAuthModalOpen(false);
@@ -113,9 +121,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithEmail = async (email: string, password: string) => {
     try {
-      const blocked = await isEmailBlocked(email);
-      if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-      await fbSignIn(email, password);
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const blocked = await isEmailBlocked(email);
+        if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
+      const cred = await fbSignIn(email, password);
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const profile = await getUserProfile(cred.user.uid);
+        if (profile?.isBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
+      }
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
@@ -129,7 +146,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async () => {
     try {
-      await fbGoogleSignIn();
+      const cred = await fbGoogleSignIn();
+      if (cred?.user?.email && cred.user.email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const emailBlocked = await isEmailBlocked(cred.user.email);
+        if (emailBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
+        const profile = await getUserProfile(cred.user.uid);
+        if (profile?.isBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
+      }
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {

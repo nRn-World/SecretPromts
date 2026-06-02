@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, Check, XCircle, Clock, Shield, UserCheck, AlertTriangle,
-  Send, Mail, Search, Ban, Crown, Eye, Users, Megaphone
+  Send, Mail, Search, Ban, Crown, Eye, Users, Megaphone, UserX
 } from 'lucide-react';
 import {
   subscribeApplications, updateApplicationStatus, subscribeAllUsers,
   blockUser, unblockUser, subscribeBlockedEmails, sendWarning, sendAdminNewsToAllUsers,
-  subscribeAdminNews,
+  subscribeAdminNews, removeAuthorRights,
   type AuthorApplication, type UserProfile, type Warning, type AdminNews
 } from '../firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -266,18 +266,18 @@ export const AdminDashboardInner: React.FC<{
                                 key={p.value}
                                 onClick={() => handleAccept(app, p.value)}
                                 disabled={actionLoading === app.id}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition disabled:opacity-50"
+                                className="flex items-center gap-1 px-4 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white hover:shadow-[0_0_25px_rgba(16,185,129,0.7)] hover:scale-105 text-xs font-bold transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
                               >
-                                <Check className="w-3 h-3" />
+                                <Check className="w-3.5 h-3.5" />
                                 {p.label}
                               </button>
                             ))}
                             <button
                               onClick={() => handleReject(app)}
                               disabled={actionLoading === app.id}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-bold transition disabled:opacity-50"
+                              className="flex items-center gap-1 px-4 py-2 rounded-2xl bg-red-500/15 hover:bg-red-500/30 border border-red-500/40 text-red-300 hover:text-white hover:shadow-[0_0_25px_rgba(239,68,68,0.7)] hover:scale-105 text-xs font-bold transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
                             >
-                              <XCircle className="w-3 h-3" />
+                              <XCircle className="w-3.5 h-3.5" />
                               Neka
                             </button>
                           </div>
@@ -310,7 +310,7 @@ export const AdminDashboardInner: React.FC<{
                     type="button"
                     onClick={handleBroadcastNews}
                     disabled={broadcastLoading || !broadcastMessage.trim()}
-                    className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-purple-500 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] hover:scale-[1.02] active:scale-[0.98] px-4 py-2 text-xs font-bold text-white transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
                   >
                     <Send className="h-3.5 w-3.5" />
                     {broadcastLoading ? t('adminBroadcastSending') : t('adminBroadcastSend')}
@@ -353,7 +353,9 @@ export const AdminDashboardInner: React.FC<{
               <div className="space-y-3">
                 {users
                   .filter(u => u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || u.uid?.includes(searchQuery) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(u => (
+                  .map(u => {
+                    const isAdminEmail = u.email?.toLowerCase() === 'bynrnworld@gmail.com';
+                    return (
                     <div key={u.uid} className="flex items-center justify-between p-4 rounded-xl bg-zinc-800/50 border border-zinc-800">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
@@ -363,10 +365,12 @@ export const AdminDashboardInner: React.FC<{
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-white text-sm truncate">{u.displayName}</span>
                             {u.isAuthor && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                            {isAdminEmail && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">Admin</span>}
                             {u.isBlocked && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">Blockerad</span>}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500 mt-0.5">
                             {u.email && <span className="text-zinc-400">{u.email}</span>}
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Medlem sedan: {u.createdAt?.split('T')[0]}</span>
                             <span>{u.uid?.slice(0, 12)}...</span>
                             {u.authorExpiresAt && (
                               <span className="text-amber-400/70">Utgår: {u.authorExpiresAt.split('T')[0]}</span>
@@ -377,38 +381,50 @@ export const AdminDashboardInner: React.FC<{
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleViewProfile(u.uid)}
-                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-purple-400 transition"
+                          className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:text-purple-400 hover:bg-zinc-600 transition-all duration-200 group"
                           title={t('adminViewProfile')}
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5 drop-shadow-[0_0_8px_rgba(168,85,247,0)] group-hover:drop-shadow-[0_0_8px_rgba(168,85,247,1)] group-hover:scale-110 transition-all duration-200" />
                         </button>
-                        <button
-                          onClick={() => { setWarningTarget(u); setShowWarningModal(true); }}
-                          className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-amber-400 transition"
-                          title={t('adminSendWarning')}
-                        >
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                        </button>
-                        {!u.isBlocked ? (
+                        {!isAdminEmail && (
                           <button
-                            onClick={() => handleBlock(u.uid, u.email)}
-                            className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-red-400 transition"
-                            title="Blockera"
+                            onClick={() => { setWarningTarget(u); setShowWarningModal(true); }}
+                            className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:text-amber-400 hover:bg-zinc-600 transition-all duration-200 group"
+                            title={t('adminSendWarning')}
                           >
-                            <Ban className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleUnblock(u.email!, u.uid)}
-                            className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-400 hover:text-emerald-400 transition"
-                            title="Avblockera"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
+                            <AlertTriangle className="w-3.5 h-3.5 drop-shadow-[0_0_8px_rgba(245,158,11,0)] group-hover:drop-shadow-[0_0_8px_rgba(245,158,11,1)] group-hover:scale-110 transition-all duration-200" />
                           </button>
                         )}
+                        {!isAdminEmail && u.isAuthor && (
+                          <button
+                            onClick={() => removeAuthorRights(u.uid)}
+                            className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:text-rose-400 hover:bg-zinc-600 transition-all duration-200 group"
+                            title="Ta bort skaparrättigheter"
+                          >
+                            <UserX className="w-3.5 h-3.5 drop-shadow-[0_0_8px_rgba(248,113,113,0)] group-hover:drop-shadow-[0_0_8px_rgba(248,113,113,1)] group-hover:scale-110 transition-all duration-200" />
+                          </button>
+                        )}
+                        {!isAdminEmail && !u.isBlocked ? (
+                          <button
+                            onClick={() => handleBlock(u.uid, u.email)}
+                            className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:text-red-400 hover:bg-zinc-600 transition-all duration-200 group"
+                            title="Blockera"
+                          >
+                            <Ban className="w-3.5 h-3.5 drop-shadow-[0_0_8px_rgba(239,68,68,0)] group-hover:drop-shadow-[0_0_8px_rgba(239,68,68,1)] group-hover:scale-110 transition-all duration-200" />
+                          </button>
+                        ) : !isAdminEmail && u.isBlocked ? (
+                          <button
+                            onClick={() => handleUnblock(u.email!, u.uid)}
+                            className="p-2 rounded-lg bg-zinc-700 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-600 transition-all duration-200 group"
+                            title="Avblockera"
+                          >
+                            <UserCheck className="w-3.5 h-3.5 drop-shadow-[0_0_8px_rgba(16,185,129,0)] group-hover:drop-shadow-[0_0_8px_rgba(16,185,129,1)] group-hover:scale-110 transition-all duration-200" />
+                          </button>
+                        ) : null}
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
               </div>
             </div>
           )}
@@ -429,9 +445,9 @@ export const AdminDashboardInner: React.FC<{
                     </div>
                     <button
                       onClick={() => handleUnblock(b.email, b.uid)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition"
+                      className="flex items-center gap-1 px-4 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white hover:shadow-[0_0_25px_rgba(16,185,129,0.7)] hover:scale-105 text-xs font-bold transition-all duration-300"
                     >
-                      <UserCheck className="w-3 h-3" />
+                      <UserCheck className="w-3.5 h-3.5" />
                       Avblockera
                     </button>
                   </div>
