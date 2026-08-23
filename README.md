@@ -103,3 +103,9 @@ See the [LICENSE](./LICENSE) file for full details.
   <p>Built with ❤️ by <a href="https://github.com/nRn-World">nRn World</a></p>
   <p>Copyright &copy; 2026 SecretPromts</p>
 </div>
+
+---
+
+☕ **Support development**: [Buy me a coffee 💜](https://ko-fi.com/nrnworld)
+
+Created by ❤️ © nRn World
