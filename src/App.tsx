@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { PromptProvider } from './context/PromptContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider } from './context/AuthContext';
+
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
-import { Marquee } from './components/Marquee';
 import { Filters } from './components/Filters';
 import { PromptGrid } from './components/PromptGrid';
 import { CreatePromptModal } from './components/CreatePromptModal';
@@ -16,16 +16,19 @@ import { AuthorApplication } from './components/AuthorApplication';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { UserProfileModal } from './components/UserProfileModal';
+import { ParticleBackground } from './components/ParticleBackground';
+import { ToastContainer } from './components/Toast';
 import { useAuth } from './context/AuthContext';
 import { ensureUserProfile } from './firebase/firestore';
+
 
 /** Syncs Firebase Auth user → Firestore users/{uid} on login */
 function UserProfileSync() {
   const { user, isGuest } = useAuth();
   useEffect(() => {
     if (isGuest || !user.id) return;
-    ensureUserProfile(user.id, user.displayName).catch(console.error);
-  }, [user.id, user.displayName, isGuest]);
+    ensureUserProfile(user.id, user.displayName, user.email).catch(console.error);
+  }, [user.id, user.displayName, user.email, isGuest]);
   return null;
 }
 
@@ -36,6 +39,9 @@ export default function App() {
         <PromptProvider>
           <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-400 selection:text-zinc-950">
 
+            {/* Particle background */}
+            <ParticleBackground />
+
             {/* Sync logged-in user to Firestore */}
             <UserProfileSync />
 
@@ -45,7 +51,6 @@ export default function App() {
             {/* Main interactive content */}
             <main className="flex-1">
               <Hero />
-              <Marquee />
               <Filters />
               <PromptGrid />
               <AuthorApplication />
@@ -59,6 +64,7 @@ export default function App() {
             <ManageCategoriesModal />
             <EditPromptModal />
             <UserProfileModal />
+            <ToastContainer />
 
             {/* Professional Footer */}
             <Footer />
@@ -66,6 +72,6 @@ export default function App() {
           </div>
         </PromptProvider>
       </AuthProvider>
-    </LanguageProvider>
+      </LanguageProvider>
   );
 }

@@ -1,11 +1,19 @@
-import React from 'react';
-import { Plus, Heart, FolderGit2, Sparkles, User, LogOut, Bell, UserPlus, ThumbsUp } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Heart, FolderGit2, Sparkles, User, LogOut, Bell, UserPlus, ThumbsUp, Shield, Crown, AlertTriangle, Megaphone } from 'lucide-react';
 import { usePrompts } from '../context/PromptContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { LanguageSelector } from './LanguageSelector';
 import logoImg from '../../logo/SP-no-bg.png';
-import { subscribeUserProfile, markNotificationsRead, type UserProfile } from '../firebase/firestore';
+import {
+  subscribeUserProfile,
+  markNotificationsRead,
+  subscribePendingApplicationCount,
+  type UserProfile
+} from '../firebase/firestore';
+import { AdminDashboardModal } from './AdminDashboard';
+import { WarningModal } from './WarningModal';
+import { AdminNewsModal } from './AdminNewsModal';
 
 
 export const Header: React.FC = () => {
@@ -17,8 +25,14 @@ export const Header: React.FC = () => {
     setIsCreateModalOpen, 
     prompts,
     isAdmin,
+    isAuthor,
     openUserProfile
   } = usePrompts();
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [adminNewsId, setAdminNewsId] = useState<string | null>(null);
+  const [pendingAuthorApps, setPendingAuthorApps] = useState(0);
+  const [authorAppsLoadError, setAuthorAppsLoadError] = useState(false);
 
   const customCount = prompts.filter(p => p.isCustom).length;
 
@@ -36,6 +50,19 @@ export const Header: React.FC = () => {
       setActiveTab('all');
     }
   }, [activeTab, isGuest, setActiveTab]);
+
+  React.useEffect(() => {
+    if (!isAdmin) {
+      setPendingAuthorApps(0);
+      setAuthorAppsLoadError(false);
+      return;
+    }
+    const unsub = subscribePendingApplicationCount(
+      setPendingAuthorApps,
+      () => setAuthorAppsLoadError(true)
+    );
+    return unsub;
+  }, [isAdmin]);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
@@ -71,7 +98,7 @@ export const Header: React.FC = () => {
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>{t('gallery')}</span>
-              <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.2 rounded-full border border-white/10">
+              <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.5 rounded-full border border-white/10">
                 {prompts.length}
               </span>
             </button>
@@ -102,7 +129,7 @@ export const Header: React.FC = () => {
                 <FolderGit2 className="w-3.5 h-3.5" />
                 <span>{t('myPrompts')}</span>
                 {customCount > 0 && (
-                  <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.2 rounded-full border border-white/10">
+                  <span className="bg-zinc-950/40 text-[10px] px-1.5 py-0.5 rounded-full border border-white/10">
                     {customCount}
                   </span>
                 )}
@@ -152,12 +179,48 @@ export const Header: React.FC = () => {
                           </div>
                         ))}
                         {[...(myProfile?.notifications || [])].reverse().map(n => (
-                          <div key={n.id} className="p-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors flex gap-3 items-center">
-                            <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400 shrink-0">
-                              {n.type === 'like' ? <ThumbsUp className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                          <div
+                            key={n.id}
+                            className={`p-3 border-b border-zinc-800/50 flex gap-3 items-center transition-colors ${
+                              n.type === 'admin_news' || n.type === 'warning'
+                                ? 'cursor-pointer hover:bg-zinc-800/50'
+                                : ''
+                            }`}
+                            onClick={() => {
+                              if (n.type === 'admin_news') {
+                                setIsNotifOpen(false);
+                                setAdminNewsId(n.id);
+                              } else if (n.type === 'warning') {
+                                setIsNotifOpen(false);
+                                setShowWarningModal(true);
+                              }
+                            }}
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                              n.type === 'like' ? 'bg-pink-500/20 text-pink-400' :
+                              n.type === 'warning' ? 'bg-amber-500/20 text-amber-400' :
+                              n.type === 'admin_news' ? 'bg-purple-500/20 text-purple-400' :
+                              n.type === 'author_granted' ? 'bg-emerald-500/20 text-emerald-400' :
+                              'bg-purple-500/20 text-purple-400'
+                            }`}>
+                              {n.type === 'like' ? <ThumbsUp className="w-4 h-4" /> :
+                               n.type === 'warning' ? <AlertTriangle className="w-4 h-4" /> :
+                               n.type === 'admin_news' ? <Megaphone className="w-4 h-4" /> :
+                               n.type === 'author_granted' ? <Crown className="w-4 h-4" /> :
+                               <User className="w-4 h-4" />}
                             </div>
                             <div className="text-xs text-zinc-300">
-                              <span className="font-bold text-white">{n.fromName}</span> gillade din prompt "{n.promptTitle}".
+                              {n.type === 'like' ? (
+                                 <>{n.fromUid ? <button type="button" onClick={() => { setIsNotifOpen(false); openUserProfile(n.fromUid); }} className="font-bold text-white hover:text-purple-400 transition-colors">{n.fromName}</button> : <span className="font-bold text-white">{n.fromName}</span>} gillade din prompt "{n.promptTitle}".</>
+                                ) : n.type === 'warning' ? (
+                                 <span><span className="font-bold text-amber-400">Varning!</span> Admin har skickat ett meddelande till dig. <span className="text-purple-400">Klicka för att läsa.</span></span>
+                               ) : n.type === 'admin_news' ? (
+                                 <span><span className="font-bold text-purple-300">{t('adminNewsNotifTitle')}</span> {t('adminNewsNotifBody')} <span className="text-purple-400">Klicka för att läsa.</span></span>
+                               ) : n.type === 'author_granted' ? (
+                                 <span><span className="font-bold text-emerald-400">Grattis!</span> Du har blivit godkänd som skapare!</span>
+                               ) : (
+                                 <><span className="font-bold text-white">{n.fromName}</span> {n.type === 'friend_request_accepted' ? 'accepterade din vänförfrågan' : ''}</>
+                               )}
                             </div>
                           </div>
                         ))}
@@ -188,20 +251,38 @@ export const Header: React.FC = () => {
                   <LogOut className="h-3.5 w-3.5" />
                 </button>
               )}
-              {isAdmin && (
-                <span className="text-[10px] font-bold text-amber-400 px-1">▲ Admin</span>
+            {isAdmin && (
+                <button
+                  onClick={() => setShowAdminPanel(true)}
+                  className="relative flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 transition"
+                  title={
+                    pendingAuthorApps > 0
+                      ? t('adminPendingAuthorAppsTitle').replace('{count}', String(pendingAuthorApps))
+                      : t('adminPanelTitle')
+                  }
+                >
+                  <Shield className="w-3 h-3" />
+                  Admin
+                  {pendingAuthorApps > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-amber-500 text-[9px] font-black text-zinc-950 leading-none">
+                      {pendingAuthorApps > 9 ? '9+' : pendingAuthorApps}
+                    </span>
+                  )}
+                </button>
               )}
             </div>
 
-            <a
-              href="#become-author"
-              className="hidden lg:flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-3.5 py-2.5 text-xs font-bold text-purple-300 transition-colors hover:bg-purple-500/20 hover:text-white"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>{t('becomeAuthor')}</span>
-            </a>
+            {!isAdmin && !isAuthor && (
+              <a
+                href="#become-author"
+                className="hidden lg:flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/10 px-3.5 py-2.5 text-xs font-bold text-purple-300 transition-colors hover:bg-purple-500/20 hover:text-white"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{t('becomeAuthor')}</span>
+              </a>
+            )}
 
-            {isAdmin && (
+            {(isAdmin || isAuthor) && (
               <button
                 onClick={() => setIsCreateModalOpen(true)}
                 className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-pink-600 hover:from-amber-400 hover:to-pink-500 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-pink-500/20 transition-all active:scale-95"
@@ -250,7 +331,45 @@ export const Header: React.FC = () => {
           )}
         </div>
 
+        {isAdmin && pendingAuthorApps > 0 && (
+          <div className="border-t border-amber-500/20 bg-amber-500/10 px-4 py-2.5 sm:px-6">
+            <button
+              type="button"
+              onClick={() => setShowAdminPanel(true)}
+              className="mx-auto flex max-w-[90rem] w-full items-center justify-between gap-3 text-left"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Crown className="h-4 w-4 shrink-0 text-amber-400" />
+                <p className="text-xs font-bold text-amber-100 sm:text-sm">
+                  {t('adminPendingAuthorAppsBanner').replace('{count}', String(pendingAuthorApps))}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-amber-300">
+                {t('adminReviewApplications')}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {isAdmin && authorAppsLoadError && pendingAuthorApps === 0 && (
+          <div className="border-t border-red-500/20 bg-red-500/10 px-4 py-2 text-center text-xs text-red-300">
+            {t('adminAuthorAppsLoadError')}
+          </div>
+        )}
+
       </div>
+      {showAdminPanel && isAdmin && (
+        <AdminDashboardModal
+          onClose={() => setShowAdminPanel(false)}
+          initialPendingCount={pendingAuthorApps}
+        />
+      )}
+      {showWarningModal && myProfile?.warnings && myProfile.warnings.length > 0 && (
+        <WarningModal warnings={myProfile.warnings} onClose={() => setShowWarningModal(false)} />
+      )}
+      {adminNewsId && (
+        <AdminNewsModal newsId={adminNewsId} onClose={() => setAdminNewsId(null)} />
+      )}
     </header>
   );
 };

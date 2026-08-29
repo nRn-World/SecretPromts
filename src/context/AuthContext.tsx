@@ -1,18 +1,19 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
-import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn } from '../firebase/auth';
-import { getAdminEmail, setAdminEmail } from '../firebase/firestore';
+import React, { createContext, useContext, useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogleIdToken } from '../firebase/auth';
+import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile, ensureUserProfile } from '../firebase/firestore';
 import type { User } from 'firebase/auth';
 
 interface AuthContextType {
   user: AuthUser;
   isGuest: boolean;
   isAdmin: boolean;
+  isAuthor: boolean;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (isOpen: boolean) => void;
   createAccount: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
   loginWithEmail: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
-  loginWithGoogle: () => Promise<{ ok: boolean; message: string }>;
-  continueAsGuest: () => void;
+  completeGoogleSignIn: (idToken: string) => Promise<{ ok: boolean; message: string }>;
+  continueAsGuest: () => void | Promise<void>;
   logout: () => void;
   loginAsAdmin: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   signUpAdmin: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
@@ -24,6 +25,7 @@ export interface AuthUser {
   displayName: string;
   isGuest: boolean;
   isAdmin: boolean;
+  isAuthor: boolean;
 }
 
 const guestUser: AuthUser = {
@@ -32,48 +34,124 @@ const guestUser: AuthUser = {
   displayName: 'Guest',
   isGuest: true,
   isAdmin: false,
+  isAuthor: false,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const syncUserProfile = async (user: User) => {
+  await ensureUserProfile(
+    user.uid,
+    user.displayName || user.email?.split('@')[0] || 'User',
+    user.email || undefined,
+    user.photoURL || undefined,
+  );
+};
+
+const checkIfBlocked = async (user: User): Promise<boolean> => {
+  if (user.email?.toLowerCase() === 'bynrnworld@gmail.com') return false;
+  if (user.email && await isEmailBlocked(user.email)) return true;
+  const profile = await getUserProfile(user.uid);
+  return !!profile?.isBlocked;
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [adminEmail, setAdminEmailState] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isAuthorState, setIsAuthorState] = useState(false);
   const [loading, setLoading] = useState(true);
+  const syncGeneration = useRef(0);
+
+  const mapGoogleAuthError = (code?: string): string => {
+    if (code === 'auth/popup-closed-by-user') return 'authPopupClosed';
+    if (code === 'auth/unauthorized-domain') return 'authUnauthorizedDomain';
+    if (code === 'auth/popup-blocked') return 'authPopupBlocked';
+    if (code === 'auth/operation-not-allowed') return 'authGoogleDisabled';
+    if (code === 'auth/network-request-failed') return 'authNetworkError';
+    return 'authGenericError';
+  };
+
+  const syncUserInBackground = async (user: User) => {
+    const generation = ++syncGeneration.current;
+    try {
+      await syncUserProfile(user);
+      const blocked = await checkIfBlocked(user);
+      if (generation !== syncGeneration.current) return;
+
+      if (blocked) {
+        setIsBlocked(true);
+        setIsAuthorState(false);
+        await fbLogOut();
+        setIsAuthModalOpen(true);
+        return;
+      }
+
+      setIsBlocked(false);
+      const profile = await getUserProfile(user.uid);
+      if (generation !== syncGeneration.current) return;
+      setIsAuthorState(!!profile?.isAuthor);
+    } catch (error) {
+      console.error('Auth profile sync failed:', error);
+      if (generation !== syncGeneration.current) return;
+      setIsBlocked(false);
+    }
+  };
 
   useEffect(() => {
-    const unsub = onAuthChanged((user) => {
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    unsub = onAuthChanged((user) => {
+      if (!active) return;
       setFirebaseUser(user);
-      if (!user) setLoading(false);
+      setLoading(false);
+
+      if (!user) {
+        syncGeneration.current += 1;
+        setIsBlocked(false);
+        setIsAuthorState(false);
+        return;
+      }
+
+      void syncUserInBackground(user);
     });
-    return unsub;
+
+    getAdminEmail().then((email) => {
+      if (active) setAdminEmailState(email);
+    });
+
+    return () => {
+      active = false;
+      syncGeneration.current += 1;
+      unsub?.();
+    };
   }, []);
 
   useEffect(() => {
-    if (!firebaseUser) {
-      setLoading(false);
-      return;
-    }
-    getAdminEmail().then((email) => {
-      setAdminEmailState(email);
-      setLoading(false);
-    });
-  }, [firebaseUser]);
+    const timeout = window.setTimeout(() => setLoading(false), 5000);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   const user = useMemo<AuthUser>(() => {
-    if (!firebaseUser) return guestUser;
+    if (!firebaseUser || isBlocked) return guestUser;
     return {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
       displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
       isGuest: false,
-      isAdmin: firebaseUser.email === adminEmail,
+      isAdmin: firebaseUser.email?.toLowerCase() === 'bynrnworld@gmail.com',
+      isAuthor: isAuthorState,
     };
-  }, [firebaseUser, adminEmail]);
+  }, [firebaseUser, isBlocked, isAuthorState]);
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const blocked = await isEmailBlocked(email);
+        if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
       const cred = await fbSignUp(email, password);
       if (cred.user) {
         setIsAuthModalOpen(false);
@@ -91,7 +169,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithEmail = async (email: string, password: string) => {
     try {
-      await fbSignIn(email, password);
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const blocked = await isEmailBlocked(email);
+        if (blocked) return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
+      const cred = await fbSignIn(email, password);
+      if (email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const profile = await getUserProfile(cred.user.uid);
+        if (profile?.isBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
+      }
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
@@ -103,19 +192,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async () => {
+  const completeGoogleSignIn = useCallback(async (idToken: string) => {
     try {
-      await fbGoogleSignIn();
+      await signInWithGoogleIdToken(idToken);
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
-      if (e.code === 'auth/popup-closed-by-user') return { ok: false, message: 'authPopupClosed' };
-      if (e.code === 'auth/cancelled-popup-request') return { ok: false, message: 'authGenericError' };
-      return { ok: false, message: 'authGenericError' };
+      return { ok: false, message: mapGoogleAuthError(e?.code) };
     }
-  };
+  }, []);
 
   const loginAsAdmin = async (email: string, password: string) => {
+    if (email.toLowerCase() !== 'bynrnworld@gmail.com') return { ok: false, message: 'Endast bynrnworld@gmail.com kan vara admin.' };
     try {
       await fbSignIn(email, password);
       await setAdminEmail(email);
@@ -131,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUpAdmin = async (email: string, password: string, _displayName: string) => {
+    if (email.toLowerCase() !== 'bynrnworld@gmail.com') return { ok: false, message: 'Endast bynrnworld@gmail.com kan vara admin.' };
     try {
       const cred = await fbSignUp(email, password);
       if (cred.user) {
@@ -147,8 +236,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const continueAsGuest = () => {
-    setFirebaseUser(null);
+  const continueAsGuest = async () => {
+    await fbLogOut();
     setIsAuthModalOpen(false);
   };
 
@@ -161,16 +250,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     isGuest: user.isGuest,
     isAdmin: user.isAdmin,
+    isAuthor: user.isAuthor,
     isAuthModalOpen,
     setIsAuthModalOpen,
     createAccount,
     loginWithEmail,
-    loginWithGoogle,
+    completeGoogleSignIn,
     continueAsGuest,
     logout,
     loginAsAdmin,
     signUpAdmin,
-  }), [user, isAuthModalOpen, loading]);
+  }), [user, isAuthModalOpen]);
 
   if (loading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
