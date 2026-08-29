@@ -947,7 +947,7 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGoogleDisabled: 'Google sign-in is disabled in Firebase. Enable it under Authentication → Sign-in method.',
     authNetworkError: 'Network error. Check your connection and try again.',
     authGoogleLoading: 'Connecting to Google...',
-    authRedirecting: 'Redirecting to Google...'
+    authRedirecting: 'Redirecting to Google — you will return here after signing in.'
   },
   sv: {
     customBadge: 'Egen',
@@ -1077,7 +1077,7 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGoogleDisabled: 'Google-inloggning är avstängd i Firebase. Aktivera den under Authentication → Sign-in method.',
     authNetworkError: 'Nätverksfel. Kontrollera anslutningen och försök igen.',
     authGoogleLoading: 'Ansluter till Google...',
-    authRedirecting: 'Omdirigerar till Google...'
+    authRedirecting: 'Omdirigerar till Google — du kommer tillbaka hit efter inloggning.'
   },
   de: {
     customBadge: 'Eigen',

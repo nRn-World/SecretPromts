@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn, handleGoogleRedirectResult } from '../firebase/auth';
 import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile, ensureUserProfile } from '../firebase/firestore';
-import type { User, UserCredential } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 
 interface AuthContextType {
   user: AuthUser;
@@ -13,7 +13,7 @@ interface AuthContextType {
   createAccount: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
   loginWithEmail: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   loginWithGoogle: () => Promise<{ ok: boolean; message: string }>;
-  continueAsGuest: () => void;
+  continueAsGuest: () => void | Promise<void>;
   logout: () => void;
   loginAsAdmin: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   signUpAdmin: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
@@ -39,6 +39,22 @@ const guestUser: AuthUser = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const syncUserProfile = async (user: User) => {
+  await ensureUserProfile(
+    user.uid,
+    user.displayName || user.email?.split('@')[0] || 'User',
+    user.email || undefined,
+    user.photoURL || undefined,
+  );
+};
+
+const checkIfBlocked = async (user: User): Promise<boolean> => {
+  if (user.email?.toLowerCase() === 'bynrnworld@gmail.com') return false;
+  if (user.email && await isEmailBlocked(user.email)) return true;
+  const profile = await getUserProfile(user.uid);
+  return !!profile?.isBlocked;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -46,36 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isBlocked, setIsBlocked] = useState(false);
   const [isAuthorState, setIsAuthorState] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const validateGoogleCredential = async (cred: UserCredential): Promise<{ ok: boolean; message: string } | null> => {
-    try {
-      const fbUser = cred.user;
-      await ensureUserProfile(
-        fbUser.uid,
-        fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-        fbUser.email || undefined,
-        fbUser.photoURL || undefined,
-      );
-
-      if (fbUser.email && fbUser.email.toLowerCase() !== 'bynrnworld@gmail.com') {
-        const emailBlocked = await isEmailBlocked(fbUser.email);
-        if (emailBlocked) {
-          await fbLogOut();
-          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-        }
-        const profile = await getUserProfile(fbUser.uid);
-        if (profile?.isBlocked) {
-          await fbLogOut();
-          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Google credential validation failed:', error);
-      await fbLogOut();
-      return { ok: false, message: 'authGenericError' };
-    }
-  };
 
   const mapGoogleAuthError = (code?: string): string => {
     if (code === 'auth/popup-closed-by-user') return 'authPopupClosed';
@@ -87,61 +73,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    const unsub = onAuthChanged(async (user) => {
-      setFirebaseUser(user);
-      if (!user) {
-        setLoading(false);
-        setIsBlocked(false);
-      } else if (user.email?.toLowerCase() === 'bynrnworld@gmail.com') {
-        // Admin email is never blocked
-        setIsBlocked(false);
-        const profile = await getUserProfile(user.uid);
-        setIsAuthorState(!!profile?.isAuthor);
-        setLoading(false);
-      } else {
-        try {
-          const emailBlocked = await isEmailBlocked(user.email || '');
-          const profile = await getUserProfile(user.uid);
-          setIsBlocked(emailBlocked || !!profile?.isBlocked);
-          setIsAuthorState(!!profile?.isAuthor);
-        } catch (error) {
-          console.error('Auth state check failed:', error);
-          setIsBlocked(false);
-          setIsAuthorState(false);
-        } finally {
-          setLoading(false);
-        }
-      }
-    });
-    return unsub;
-  }, []);
+    let active = true;
 
-  useEffect(() => {
     handleGoogleRedirectResult()
-      .then(async (result) => {
-        if (!result?.user) return;
-        const blocked = await validateGoogleCredential(result);
-        if (blocked) {
-          setIsAuthModalOpen(true);
-        } else {
-          setIsAuthModalOpen(false);
-        }
+      .then((result) => {
+        if (result?.user) setIsAuthModalOpen(false);
       })
       .catch((error) => {
         console.error('Google redirect sign-in failed:', error);
       });
-  }, []);
 
-  useEffect(() => {
-    if (!firebaseUser) {
-      setLoading(false);
-      return;
-    }
-    getAdminEmail().then((email) => {
-      setAdminEmailState(email);
-      setLoading(false);
+    const unsub = onAuthChanged(async (user) => {
+      if (!active) return;
+      setFirebaseUser(user);
+
+      if (!user) {
+        setIsBlocked(false);
+        setIsAuthorState(false);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        await syncUserProfile(user);
+        const blocked = await checkIfBlocked(user);
+        if (!active) return;
+
+        if (blocked) {
+          setIsBlocked(true);
+          setIsAuthorState(false);
+          await fbLogOut();
+          setIsAuthModalOpen(true);
+          return;
+        }
+
+        setIsBlocked(false);
+        const profile = await getUserProfile(user.uid);
+        if (!active) return;
+        setIsAuthorState(!!profile?.isAuthor);
+      } catch (error) {
+        console.error('Auth profile sync failed:', error);
+        if (!active) return;
+        setIsBlocked(false);
+      } finally {
+        if (active) setLoading(false);
+      }
     });
-  }, [firebaseUser]);
+
+    getAdminEmail().then((email) => {
+      if (active) setAdminEmailState(email);
+    });
+
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, []);
 
   const user = useMemo<AuthUser>(() => {
     if (!firebaseUser || isBlocked) return guestUser;
@@ -153,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAdmin: firebaseUser.email?.toLowerCase() === 'bynrnworld@gmail.com',
       isAuthor: isAuthorState,
     };
-  }, [firebaseUser, adminEmail, isBlocked, isAuthorState]);
+  }, [firebaseUser, isBlocked, isAuthorState]);
 
   const createAccount = async (email: string, password: string, _displayName: string) => {
     try {
@@ -202,19 +189,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async () => {
-    let signedIn = false;
     try {
-      const cred = await fbGoogleSignIn();
-      signedIn = true;
-      const blocked = await validateGoogleCredential(cred);
-      if (blocked) return blocked;
-      setIsAuthModalOpen(false);
-      return { ok: true, message: 'authLoggedIn' };
+      await fbGoogleSignIn();
+      return { ok: true, message: 'authRedirecting' };
     } catch (e: any) {
-      if (signedIn) await fbLogOut();
-      if (e?.message === 'auth/redirect-initiated') {
-        return { ok: true, message: 'authRedirecting' };
-      }
       return { ok: false, message: mapGoogleAuthError(e?.code) };
     }
   };
@@ -253,8 +231,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const continueAsGuest = () => {
-    setFirebaseUser(null);
+  const continueAsGuest = async () => {
+    await fbLogOut();
     setIsAuthModalOpen(false);
   };
 
@@ -262,13 +240,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fbLogOut();
     setAdminEmailState(null);
   };
-
-  // If user is blocked, log them out
-  useEffect(() => {
-    if (isBlocked && firebaseUser) {
-      fbLogOut();
-    }
-  }, [isBlocked, firebaseUser]);
 
   const value = useMemo<AuthContextType>(() => ({
     user,
@@ -284,7 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     loginAsAdmin,
     signUpAdmin,
-  }), [user, isAuthModalOpen, loading]);
+  }), [user, isAuthModalOpen]);
 
   if (loading) {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
