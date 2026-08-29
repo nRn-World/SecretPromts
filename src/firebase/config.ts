@@ -11,4 +11,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+export const googleClientId = '854110275451-rprkdsdorr5atqamuc5acs8l6mclt4l5.apps.googleusercontent.com';
+
 export default app;

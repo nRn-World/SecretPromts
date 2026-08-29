@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
-import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn, handleGoogleRedirectResult } from '../firebase/auth';
+import React, { createContext, useContext, useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogleIdToken } from '../firebase/auth';
 import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile, ensureUserProfile } from '../firebase/firestore';
 import type { User } from 'firebase/auth';
 
@@ -12,7 +12,7 @@ interface AuthContextType {
   setIsAuthModalOpen: (isOpen: boolean) => void;
   createAccount: (email: string, password: string, displayName: string) => Promise<{ ok: boolean; message: string }>;
   loginWithEmail: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
-  loginWithGoogle: () => Promise<{ ok: boolean; message: string }>;
+  completeGoogleSignIn: (idToken: string) => Promise<{ ok: boolean; message: string }>;
   continueAsGuest: () => void | Promise<void>;
   logout: () => void;
   loginAsAdmin: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
@@ -103,33 +103,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let active = true;
     let unsub: (() => void) | undefined;
 
-    (async () => {
-      try {
-        const redirectResult = await handleGoogleRedirectResult();
-        if (redirectResult?.user && active) {
-          setIsAuthModalOpen(false);
-        }
-      } catch (error) {
-        console.error('Google redirect sign-in failed:', error);
+    unsub = onAuthChanged((user) => {
+      if (!active) return;
+      setFirebaseUser(user);
+      setLoading(false);
+
+      if (!user) {
+        syncGeneration.current += 1;
+        setIsBlocked(false);
+        setIsAuthorState(false);
+        return;
       }
 
-      if (!active) return;
-
-      unsub = onAuthChanged((user) => {
-        if (!active) return;
-        setFirebaseUser(user);
-        setLoading(false);
-
-        if (!user) {
-          syncGeneration.current += 1;
-          setIsBlocked(false);
-          setIsAuthorState(false);
-          return;
-        }
-
-        void syncUserInBackground(user);
-      });
-    })();
+      void syncUserInBackground(user);
+    });
 
     getAdminEmail().then((email) => {
       if (active) setAdminEmailState(email);
@@ -205,18 +192,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async () => {
+  const completeGoogleSignIn = useCallback(async (idToken: string) => {
     try {
-      const cred = await fbGoogleSignIn();
-      if (!cred) {
-        return { ok: true, message: 'authRedirecting' };
-      }
+      await signInWithGoogleIdToken(idToken);
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
       return { ok: false, message: mapGoogleAuthError(e?.code) };
     }
-  };
+  }, []);
 
   const loginAsAdmin = async (email: string, password: string) => {
     if (email.toLowerCase() !== 'bynrnworld@gmail.com') return { ok: false, message: 'Endast bynrnworld@gmail.com kan vara admin.' };
@@ -271,7 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthModalOpen,
     createAccount,
     loginWithEmail,
-    loginWithGoogle,
+    completeGoogleSignIn,
     continueAsGuest,
     logout,
     loginAsAdmin,

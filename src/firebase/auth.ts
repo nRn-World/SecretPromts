@@ -1,36 +1,17 @@
 import {
-  initializeAuth,
   getAuth,
-  browserLocalPersistence,
-  browserPopupRedirectResolver,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   User,
   GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  UserCredential,
+  signInWithCredential,
 } from 'firebase/auth';
-import app from './config';
+import app, { googleClientId } from './config';
 
-function createAuth() {
-  try {
-    return initializeAuth(app, {
-      persistence: browserLocalPersistence,
-      popupRedirectResolver: browserPopupRedirectResolver,
-    });
-  } catch {
-    return getAuth(app);
-  }
-}
-
-export const auth = createAuth();
-
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
+export const auth = getAuth(app);
+export { googleClientId };
 
 export const signUp = (email: string, password: string) =>
   createUserWithEmailAndPassword(auth, email, password);
@@ -43,17 +24,29 @@ export const logOut = () => signOut(auth);
 export const onAuthChanged = (cb: (user: User | null) => void) =>
   onAuthStateChanged(auth, cb);
 
-export const handleGoogleRedirectResult = () => getRedirectResult(auth);
+export const signInWithGoogleIdToken = (idToken: string) =>
+  signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
 
-export const signInWithGoogle = async (): Promise<UserCredential | null> => {
-  try {
-    return await signInWithPopup(auth, googleProvider);
-  } catch (error: unknown) {
-    const code = (error as { code?: string })?.code;
-    if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
-      await signInWithRedirect(auth, googleProvider);
-      return null;
+export const loadGoogleIdentityScript = (): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
     }
-    throw error;
-  }
-};
+
+    const existing = document.getElementById('google-identity-services');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Google Identity Services failed to load')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-identity-services';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Google Identity Services failed to load'));
+    document.head.appendChild(script);
+  });
