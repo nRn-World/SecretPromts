@@ -480,14 +480,14 @@ export const removeAuthorRights = async (uid: string) => {
 // ─── Blocked Users ────────────────────────────────────────────────────────────
 
 export const blockUser = async (uid: string, email: string, reason?: string) => {
-  if (email.toLowerCase() === 'bynrnworld@gmail.com') return; // Don't block admin
-  await setDoc(doc(db, BLOCKED_COL, email), {
-    email,
+  const normalized = email.trim().toLowerCase();
+  if (normalized === 'bynrnworld@gmail.com') return;
+  await setDoc(doc(db, BLOCKED_COL, normalized), {
+    email: normalized,
     uid,
     reason: reason || '',
     blockedAt: new Date().toISOString(),
   });
-  // Mark the user's profile as blocked
   await updateDoc(doc(db, USERS_COL, uid), { isBlocked: true });
 };
 
@@ -508,8 +508,9 @@ export const deleteUserAccountAsAdmin = async (uid: string, email?: string) => {
   const batch = writeBatch(db);
   batch.delete(doc(db, USERS_COL, uid));
   if (email) {
-    batch.set(doc(db, BLOCKED_COL, email), {
-      email,
+    const normalized = email.trim().toLowerCase();
+    batch.set(doc(db, BLOCKED_COL, normalized), {
+      email: normalized,
       uid,
       reason: 'Account deleted by admin',
       blockedAt: new Date().toISOString(),
@@ -519,7 +520,8 @@ export const deleteUserAccountAsAdmin = async (uid: string, email?: string) => {
 };
 
 export const unblockUser = async (email: string, uid?: string) => {
-  await deleteDoc(doc(db, BLOCKED_COL, email));
+  const normalized = email.trim().toLowerCase();
+  await deleteDoc(doc(db, BLOCKED_COL, normalized));
   if (uid) {
     await updateDoc(doc(db, USERS_COL, uid), { isBlocked: false });
   } else {
@@ -533,8 +535,9 @@ export const unblockUser = async (email: string, uid?: string) => {
 };
 
 export const isEmailBlocked = async (email: string): Promise<boolean> => {
-  if (email.toLowerCase() === 'bynrnworld@gmail.com') return false; // Admin email is never blocked
-  const snap = await getDoc(doc(db, BLOCKED_COL, email));
+  const normalized = email.trim().toLowerCase();
+  if (normalized === 'bynrnworld@gmail.com') return false;
+  const snap = await getDoc(doc(db, BLOCKED_COL, normalized));
   return snap.exists();
 };
 

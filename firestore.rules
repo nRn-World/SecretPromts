@@ -45,7 +45,10 @@ service cloud.firestore {
     }
 
     match /blocked/{blockedId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin()
+        || (isSignedIn()
+          && request.auth.token.email != null
+          && request.auth.token.email.lower() == blockedId.lower());
       allow write: if isAdmin();
     }
 

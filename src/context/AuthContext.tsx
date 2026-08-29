@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn, handleGoogleRedirectResult } from '../firebase/auth';
-import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile } from '../firebase/firestore';
+import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile, ensureUserProfile } from '../firebase/firestore';
 import type { User, UserCredential } from 'firebase/auth';
 
 interface AuthContextType {
@@ -48,19 +48,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const validateGoogleCredential = async (cred: UserCredential): Promise<{ ok: boolean; message: string } | null> => {
-    if (cred?.user?.email && cred.user.email.toLowerCase() !== 'bynrnworld@gmail.com') {
-      const emailBlocked = await isEmailBlocked(cred.user.email);
-      if (emailBlocked) {
-        await fbLogOut();
-        return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+    try {
+      const fbUser = cred.user;
+      await ensureUserProfile(
+        fbUser.uid,
+        fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+        fbUser.email || undefined,
+        fbUser.photoURL || undefined,
+      );
+
+      if (fbUser.email && fbUser.email.toLowerCase() !== 'bynrnworld@gmail.com') {
+        const emailBlocked = await isEmailBlocked(fbUser.email);
+        if (emailBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
+        const profile = await getUserProfile(fbUser.uid);
+        if (profile?.isBlocked) {
+          await fbLogOut();
+          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+        }
       }
-      const profile = await getUserProfile(cred.user.uid);
-      if (profile?.isBlocked) {
-        await fbLogOut();
-        return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-      }
+      return null;
+    } catch (error) {
+      console.error('Google credential validation failed:', error);
+      await fbLogOut();
+      return { ok: false, message: 'authGenericError' };
     }
-    return null;
   };
 
   const mapGoogleAuthError = (code?: string): string => {
@@ -85,16 +99,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAuthorState(!!profile?.isAuthor);
         setLoading(false);
       } else {
-        // Check if email is blocked
-        const emailBlocked = await isEmailBlocked(user.email || '');
-        setIsBlocked(emailBlocked);
-        
-        // Also check user profile
-        const profile = await getUserProfile(user.uid);
-        if (profile?.isBlocked) {
-          setIsBlocked(true);
+        try {
+          const emailBlocked = await isEmailBlocked(user.email || '');
+          const profile = await getUserProfile(user.uid);
+          setIsBlocked(emailBlocked || !!profile?.isBlocked);
+          setIsAuthorState(!!profile?.isAuthor);
+        } catch (error) {
+          console.error('Auth state check failed:', error);
+          setIsBlocked(false);
+          setIsAuthorState(false);
+        } finally {
+          setLoading(false);
         }
-        setIsAuthorState(!!profile?.isAuthor);
       }
     });
     return unsub;
@@ -186,13 +202,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async () => {
+    let signedIn = false;
     try {
       const cred = await fbGoogleSignIn();
+      signedIn = true;
       const blocked = await validateGoogleCredential(cred);
       if (blocked) return blocked;
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
+      if (signedIn) await fbLogOut();
       if (e?.message === 'auth/redirect-initiated') {
         return { ok: true, message: 'authRedirecting' };
       }
