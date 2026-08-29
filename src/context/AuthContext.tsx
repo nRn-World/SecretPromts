@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useRef } from 'react';
 import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn, handleGoogleRedirectResult } from '../firebase/auth';
 import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile, ensureUserProfile } from '../firebase/firestore';
 import type { User } from 'firebase/auth';
@@ -62,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isBlocked, setIsBlocked] = useState(false);
   const [isAuthorState, setIsAuthorState] = useState(false);
   const [loading, setLoading] = useState(true);
+  const syncGeneration = useRef(0);
 
   const mapGoogleAuthError = (code?: string): string => {
     if (code === 'auth/popup-closed-by-user') return 'authPopupClosed';
@@ -72,53 +73,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return 'authGenericError';
   };
 
-  useEffect(() => {
-    let active = true;
+  const syncUserInBackground = async (user: User) => {
+    const generation = ++syncGeneration.current;
+    try {
+      await syncUserProfile(user);
+      const blocked = await checkIfBlocked(user);
+      if (generation !== syncGeneration.current) return;
 
-    handleGoogleRedirectResult()
-      .then((result) => {
-        if (result?.user) setIsAuthModalOpen(false);
-      })
-      .catch((error) => {
-        console.error('Google redirect sign-in failed:', error);
-      });
-
-    const unsub = onAuthChanged(async (user) => {
-      if (!active) return;
-      setFirebaseUser(user);
-
-      if (!user) {
-        setIsBlocked(false);
+      if (blocked) {
+        setIsBlocked(true);
         setIsAuthorState(false);
-        setLoading(false);
+        await fbLogOut();
+        setIsAuthModalOpen(true);
         return;
       }
 
-      try {
-        await syncUserProfile(user);
-        const blocked = await checkIfBlocked(user);
-        if (!active) return;
+      setIsBlocked(false);
+      const profile = await getUserProfile(user.uid);
+      if (generation !== syncGeneration.current) return;
+      setIsAuthorState(!!profile?.isAuthor);
+    } catch (error) {
+      console.error('Auth profile sync failed:', error);
+      if (generation !== syncGeneration.current) return;
+      setIsBlocked(false);
+    }
+  };
 
-        if (blocked) {
-          setIsBlocked(true);
+  useEffect(() => {
+    let active = true;
+    let unsub: (() => void) | undefined;
+
+    (async () => {
+      try {
+        const redirectResult = await handleGoogleRedirectResult();
+        if (redirectResult?.user && active) {
+          setIsAuthModalOpen(false);
+        }
+      } catch (error) {
+        console.error('Google redirect sign-in failed:', error);
+      }
+
+      if (!active) return;
+
+      unsub = onAuthChanged((user) => {
+        if (!active) return;
+        setFirebaseUser(user);
+        setLoading(false);
+
+        if (!user) {
+          syncGeneration.current += 1;
+          setIsBlocked(false);
           setIsAuthorState(false);
-          await fbLogOut();
-          setIsAuthModalOpen(true);
           return;
         }
 
-        setIsBlocked(false);
-        const profile = await getUserProfile(user.uid);
-        if (!active) return;
-        setIsAuthorState(!!profile?.isAuthor);
-      } catch (error) {
-        console.error('Auth profile sync failed:', error);
-        if (!active) return;
-        setIsBlocked(false);
-      } finally {
-        if (active) setLoading(false);
-      }
-    });
+        void syncUserInBackground(user);
+      });
+    })();
 
     getAdminEmail().then((email) => {
       if (active) setAdminEmailState(email);
@@ -126,8 +137,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       active = false;
-      unsub();
+      syncGeneration.current += 1;
+      unsub?.();
     };
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setLoading(false), 5000);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   const user = useMemo<AuthUser>(() => {
@@ -190,8 +207,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithGoogle = async () => {
     try {
-      await fbGoogleSignIn();
-      return { ok: true, message: 'authRedirecting' };
+      const cred = await fbGoogleSignIn();
+      if (!cred) {
+        return { ok: true, message: 'authRedirecting' };
+      }
+      setIsAuthModalOpen(false);
+      return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
       return { ok: false, message: mapGoogleAuthError(e?.code) };
     }

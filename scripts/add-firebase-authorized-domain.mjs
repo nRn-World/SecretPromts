@@ -1,13 +1,18 @@
 /**
- * Adds secretpromts.vercel.app to Firebase Auth authorized domains.
- * Uses the local Firebase CLI login session (configstore tokens).
+ * Ensures secretpromts.vercel.app exists in Firebase Auth authorized domains.
+ * Run: node scripts/add-firebase-authorized-domain.mjs
  */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const PROJECT_ID = 'secretpromts';
-const DOMAIN_TO_ADD = 'secretpromts.vercel.app';
+const DOMAINS_TO_ENSURE = [
+  'secretpromts.vercel.app',
+  'secretpromts.web.app',
+  'secretpromts.firebaseapp.com',
+  'localhost',
+];
 
 function loadFirebaseTokens() {
   const paths = [
@@ -54,17 +59,19 @@ async function main() {
   const tokens = loadFirebaseTokens();
   const config = await getAuthConfig(tokens.access_token);
   const current = config.authorizedDomains || [];
+  const updated = [...current];
 
-  if (current.includes(DOMAIN_TO_ADD)) {
-    console.log(`Already authorized: ${DOMAIN_TO_ADD}`);
-    console.log('Current domains:', current.join(', '));
+  for (const domain of DOMAINS_TO_ENSURE) {
+    if (!updated.includes(domain)) updated.push(domain);
+  }
+
+  if (updated.length === current.length) {
+    console.log('All domains already authorized:', updated.join(', '));
     return;
   }
 
-  const updated = [...current, DOMAIN_TO_ADD];
   await patchAuthConfig(tokens.access_token, config, updated);
-  console.log(`Added authorized domain: ${DOMAIN_TO_ADD}`);
-  console.log('Authorized domains:', updated.join(', '));
+  console.log('Updated authorized domains:', updated.join(', '));
 }
 
 main().catch((err) => {
