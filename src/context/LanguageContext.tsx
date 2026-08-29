@@ -941,7 +941,13 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     guestLoginCta: 'Log in to unlock prompts',
     authGenericError: 'Something went wrong. Please try again.',
     authWeakPassword: 'Password should be at least 6 characters.',
-    authWrongPassword: 'Wrong password. Try again.'
+    authWrongPassword: 'Wrong password. Try again.',
+    authUnauthorizedDomain: 'This domain is not authorized for sign-in. Add it in Firebase Console under Authentication → Settings → Authorized domains.',
+    authPopupBlocked: 'The sign-in popup was blocked. Allow popups for this site or try again.',
+    authGoogleDisabled: 'Google sign-in is disabled in Firebase. Enable it under Authentication → Sign-in method.',
+    authNetworkError: 'Network error. Check your connection and try again.',
+    authGoogleLoading: 'Connecting to Google...',
+    authRedirecting: 'Redirecting to Google...'
   },
   sv: {
     customBadge: 'Egen',
@@ -1062,7 +1068,16 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGooglePrompt: 'Ange din Google-e-postadress för att fortsätta.',
     guestLockedTitle: 'Endast gästförhandsvisning',
     guestLockedText: 'Gäster kan bläddra bland bilder, namn och kategorier, men prompt-text och kopiering kräver inloggning.',
-    guestLoginCta: 'Logga in för att låsa upp prompts'
+    guestLoginCta: 'Logga in för att låsa upp prompts',
+    authGenericError: 'Något gick fel. Försök igen.',
+    authWeakPassword: 'Lösenordet ska vara minst 6 tecken.',
+    authWrongPassword: 'Fel lösenord. Försök igen.',
+    authUnauthorizedDomain: 'Denna domän är inte godkänd för inloggning. Lägg till den i Firebase Console under Authentication → Settings → Authorized domains.',
+    authPopupBlocked: 'Inloggningspopupen blockerades. Tillåt popups för sidan eller försök igen.',
+    authGoogleDisabled: 'Google-inloggning är avstängd i Firebase. Aktivera den under Authentication → Sign-in method.',
+    authNetworkError: 'Nätverksfel. Kontrollera anslutningen och försök igen.',
+    authGoogleLoading: 'Ansluter till Google...',
+    authRedirecting: 'Omdirigerar till Google...'
   },
   de: {
     customBadge: 'Eigen',
@@ -1183,7 +1198,16 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGooglePrompt: 'Gib deine Google-E-Mail-Adresse ein, um fortzufahren.',
     guestLockedTitle: 'Nur Gastvorschau',
     guestLockedText: 'Gäste können Bilder, Namen und Kategorien ansehen, aber Prompt-Text und Kopieren sind nur nach Login verfügbar.',
-    guestLoginCta: 'Einloggen, um Prompts freizuschalten'
+    guestLoginCta: 'Einloggen, um Prompts freizuschalten',
+    authGenericError: 'Etwas ist schiefgelaufen. Bitte erneut versuchen.',
+    authWeakPassword: 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+    authWrongPassword: 'Falsches Passwort. Bitte erneut versuchen.',
+    authUnauthorizedDomain: 'Diese Domain ist für die Anmeldung nicht autorisiert. Füge sie in der Firebase Console unter Authentication → Settings → Authorized domains hinzu.',
+    authPopupBlocked: 'Das Anmelde-Popup wurde blockiert. Erlaube Popups für diese Seite oder versuche es erneut.',
+    authGoogleDisabled: 'Google-Anmeldung ist in Firebase deaktiviert. Aktiviere sie unter Authentication → Sign-in method.',
+    authNetworkError: 'Netzwerkfehler. Überprüfe deine Verbindung und versuche es erneut.',
+    authGoogleLoading: 'Verbinde mit Google...',
+    authRedirecting: 'Weiterleitung zu Google...'
   },
   es: {
     customBadge: 'Propio',
@@ -1304,7 +1328,16 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGooglePrompt: 'Introduce tu correo de Google para continuar.',
     guestLockedTitle: 'Solo vista previa de invitado',
     guestLockedText: 'Los invitados pueden ver imágenes, nombres y categorías, pero el texto del prompt y la copia requieren iniciar sesión.',
-    guestLoginCta: 'Inicia sesión para desbloquear prompts'
+    guestLoginCta: 'Inicia sesión para desbloquear prompts',
+    authGenericError: 'Algo salió mal. Inténtalo de nuevo.',
+    authWeakPassword: 'La contraseña debe tener al menos 6 caracteres.',
+    authWrongPassword: 'Contraseña incorrecta. Inténtalo de nuevo.',
+    authUnauthorizedDomain: 'Este dominio no está autorizado para iniciar sesión. Añádelo en Firebase Console en Authentication → Settings → Authorized domains.',
+    authPopupBlocked: 'La ventana de inicio de sesión fue bloqueada. Permite popups para este sitio o inténtalo de nuevo.',
+    authGoogleDisabled: 'El inicio de sesión con Google está desactivado en Firebase. Actívalo en Authentication → Sign-in method.',
+    authNetworkError: 'Error de red. Comprueba tu conexión e inténtalo de nuevo.',
+    authGoogleLoading: 'Conectando con Google...',
+    authRedirecting: 'Redirigiendo a Google...'
   },
   tr: {
     customBadge: 'Özel',
@@ -1425,7 +1458,16 @@ const extraTranslations: Record<LanguageCode, Record<string, string>> = {
     authGooglePrompt: 'Devam etmek için Google e-postanı gir.',
     guestLockedTitle: 'Sadece misafir önizlemesi',
     guestLockedText: 'Misafirler görselleri, isimleri ve kategorileri görebilir; prompt metni ve kopyalama için giriş gerekir.',
-    guestLoginCta: 'Promptları açmak için giriş yap'
+    guestLoginCta: 'Promptları açmak için giriş yap',
+    authGenericError: 'Bir şeyler ters gitti. Lütfen tekrar dene.',
+    authWeakPassword: 'Şifre en az 6 karakter olmalı.',
+    authWrongPassword: 'Yanlış şifre. Tekrar dene.',
+    authUnauthorizedDomain: 'Bu alan adı giriş için yetkili değil. Firebase Console\'da Authentication → Settings → Authorized domains bölümüne ekle.',
+    authPopupBlocked: 'Giriş penceresi engellendi. Bu site için popup\'lara izin ver veya tekrar dene.',
+    authGoogleDisabled: 'Google ile giriş Firebase\'de kapalı. Authentication → Sign-in method bölümünden etkinleştir.',
+    authNetworkError: 'Ağ hatası. Bağlantını kontrol et ve tekrar dene.',
+    authGoogleLoading: 'Google\'a bağlanılıyor...',
+    authRedirecting: 'Google\'a yönlendiriliyor...'
   }
 };
 

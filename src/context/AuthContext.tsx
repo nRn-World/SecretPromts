@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
-import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn } from '../firebase/auth';
+import { signUp as fbSignUp, signIn as fbSignIn, logOut as fbLogOut, onAuthChanged, signInWithGoogle as fbGoogleSignIn, handleGoogleRedirectResult } from '../firebase/auth';
 import { getAdminEmail, setAdminEmail, isEmailBlocked, getUserProfile } from '../firebase/firestore';
-import type { User } from 'firebase/auth';
+import type { User, UserCredential } from 'firebase/auth';
 
 interface AuthContextType {
   user: AuthUser;
@@ -47,6 +47,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthorState, setIsAuthorState] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const validateGoogleCredential = async (cred: UserCredential): Promise<{ ok: boolean; message: string } | null> => {
+    if (cred?.user?.email && cred.user.email.toLowerCase() !== 'bynrnworld@gmail.com') {
+      const emailBlocked = await isEmailBlocked(cred.user.email);
+      if (emailBlocked) {
+        await fbLogOut();
+        return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
+      const profile = await getUserProfile(cred.user.uid);
+      if (profile?.isBlocked) {
+        await fbLogOut();
+        return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
+      }
+    }
+    return null;
+  };
+
+  const mapGoogleAuthError = (code?: string): string => {
+    if (code === 'auth/popup-closed-by-user') return 'authPopupClosed';
+    if (code === 'auth/unauthorized-domain') return 'authUnauthorizedDomain';
+    if (code === 'auth/popup-blocked') return 'authPopupBlocked';
+    if (code === 'auth/operation-not-allowed') return 'authGoogleDisabled';
+    if (code === 'auth/network-request-failed') return 'authNetworkError';
+    return 'authGenericError';
+  };
+
   useEffect(() => {
     const unsub = onAuthChanged(async (user) => {
       setFirebaseUser(user);
@@ -73,6 +98,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    handleGoogleRedirectResult()
+      .then(async (result) => {
+        if (!result?.user) return;
+        const blocked = await validateGoogleCredential(result);
+        if (blocked) {
+          setIsAuthModalOpen(true);
+        } else {
+          setIsAuthModalOpen(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Google redirect sign-in failed:', error);
+      });
   }, []);
 
   useEffect(() => {
@@ -147,24 +188,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     try {
       const cred = await fbGoogleSignIn();
-      if (cred?.user?.email && cred.user.email.toLowerCase() !== 'bynrnworld@gmail.com') {
-        const emailBlocked = await isEmailBlocked(cred.user.email);
-        if (emailBlocked) {
-          await fbLogOut();
-          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-        }
-        const profile = await getUserProfile(cred.user.uid);
-        if (profile?.isBlocked) {
-          await fbLogOut();
-          return { ok: false, message: 'Detta konto är blockerat. Kontakta admin.' };
-        }
-      }
+      const blocked = await validateGoogleCredential(cred);
+      if (blocked) return blocked;
       setIsAuthModalOpen(false);
       return { ok: true, message: 'authLoggedIn' };
     } catch (e: any) {
-      if (e.code === 'auth/popup-closed-by-user') return { ok: false, message: 'authPopupClosed' };
-      if (e.code === 'auth/cancelled-popup-request') return { ok: false, message: 'authGenericError' };
-      return { ok: false, message: 'authGenericError' };
+      if (e?.message === 'auth/redirect-initiated') {
+        return { ok: true, message: 'authRedirecting' };
+      }
+      return { ok: false, message: mapGoogleAuthError(e?.code) };
     }
   };
 
