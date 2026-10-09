@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 const PROJECT_ID = 'secretpromts';
 const DOMAINS_TO_ENSURE = [
+  'nrnworld.one',
   'secretpromts.vercel.app',
   'secretpromts.web.app',
   'secretpromts.firebaseapp.com',

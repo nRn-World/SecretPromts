@@ -9,6 +9,7 @@ import { join } from 'node:path';
 const PROJECT_NUMBER = '854110275451';
 const CLIENT_ID = '854110275451-rprkdsdorr5atqamuc5acs8l6mclt4l5.apps.googleusercontent.com';
 const ORIGINS_TO_ENSURE = [
+  'https://nrnworld.one',
   'https://secretpromts.vercel.app',
   'https://secretpromts.web.app',
   'https://secretpromts.firebaseapp.com',
