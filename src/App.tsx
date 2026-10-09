@@ -18,6 +18,7 @@ import { Footer } from './components/Footer';
 import { UserProfileModal } from './components/UserProfileModal';
 import { ParticleBackground } from './components/ParticleBackground';
 import { ToastContainer } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './context/AuthContext';
 import { ensureUserProfile } from './firebase/firestore';
 
@@ -34,44 +35,46 @@ function UserProfileSync() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <PromptProvider>
-          <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-400 selection:text-zinc-950">
+    <ErrorBoundary>
+      <LanguageProvider>
+        <AuthProvider>
+          <PromptProvider>
+            <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100 antialiased selection:bg-amber-400 selection:text-zinc-950">
 
-            {/* Particle background */}
-            <ParticleBackground />
+              {/* Particle background */}
+              <ParticleBackground />
 
-            {/* Sync logged-in user to Firestore */}
-            <UserProfileSync />
+              {/* Sync logged-in user to Firestore */}
+              <UserProfileSync />
 
-            {/* Sticky Header */}
-            <Header />
+              {/* Sticky Header */}
+              <Header />
 
-            {/* Main interactive content */}
-            <main className="flex-1">
-              <Hero />
-              <Filters />
-              <PromptGrid />
-              <AuthorApplication />
-            </main>
+              {/* Main interactive content */}
+              <main className="flex-1">
+                <Hero />
+                <Filters />
+                <PromptGrid />
+                <AuthorApplication />
+              </main>
 
-            {/* Modals */}
-            <CreatePromptModal />
-            <PromptDetailModal />
-            <AuthModal />
-            <AdminLoginModal />
-            <ManageCategoriesModal />
-            <EditPromptModal />
-            <UserProfileModal />
-            <ToastContainer />
+              {/* Modals */}
+              <CreatePromptModal />
+              <PromptDetailModal />
+              <AuthModal />
+              <AdminLoginModal />
+              <ManageCategoriesModal />
+              <EditPromptModal />
+              <UserProfileModal />
+              <ToastContainer />
 
-            {/* Professional Footer */}
-            <Footer />
+              {/* Professional Footer */}
+              <Footer />
 
-          </div>
-        </PromptProvider>
-      </AuthProvider>
+            </div>
+          </PromptProvider>
+        </AuthProvider>
       </LanguageProvider>
+    </ErrorBoundary>
   );
 }

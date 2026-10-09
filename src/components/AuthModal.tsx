@@ -40,7 +40,16 @@ export const AuthModal: React.FC = () => {
         await loadGoogleIdentityScript();
         if (cancelled || !googleBtnRef.current) return;
 
-        googleBtnRef.current.innerHTML = '';
+        const host = googleBtnRef.current;
+        if (!host) return;
+
+        // GIS rewrites its own DOM (iframe/canvas) inside the mount element while
+        // React also updates that element. Keep Google's nodes in a child React
+        // never reconciles, so the two can't disagree during a commit.
+        host.replaceChildren();
+        const gisMount = document.createElement('div');
+        gisMount.style.width = '100%';
+        host.appendChild(gisMount);
 
         window.google!.accounts.id.initialize({
           client_id: googleClientId,
@@ -54,12 +63,12 @@ export const AuthModal: React.FC = () => {
           },
         });
 
-        window.google!.accounts.id.renderButton(googleBtnRef.current, {
+        window.google!.accounts.id.renderButton(gisMount, {
           type: 'standard',
           theme: 'filled_black',
           size: 'large',
           text: 'continue_with',
-          width: googleBtnRef.current.offsetWidth || 360,
+          width: host.offsetWidth || 360,
         });
 
         if (!cancelled) setGoogleReady(true);
@@ -74,6 +83,8 @@ export const AuthModal: React.FC = () => {
 
     return () => {
       cancelled = true;
+      // Drop Google's nodes while React still owns the (now empty) host.
+      googleBtnRef.current?.replaceChildren();
     };
   }, [isAuthModalOpen, completeGoogleSignIn]);
 
