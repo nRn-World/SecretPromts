@@ -16,6 +16,9 @@ dist/
 *.swo
 *~
 
+# Firebase cache
+.firebase/
+
 # OS
 .DS_Store
 Thumbs.db

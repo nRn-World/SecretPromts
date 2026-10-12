@@ -72,7 +72,7 @@
   animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Marquee Animation */
+/* Marquee Animation - slowed down to 180s */
 @keyframes marquee {
   0% { transform: translateX(0%); }
   100% { transform: translateX(-50%); }
@@ -81,7 +81,7 @@
 .animate-marquee {
   display: flex;
   width: max-content;
-  animation: marquee 35s linear infinite;
+  animation: marquee 180s linear infinite;
 }
 
 .animate-marquee:hover {
@@ -97,4 +97,91 @@
 .animate-shimmer {
   animation: shimmer 4s linear infinite;
 }
+
+/* Hide scrollbar utility for scrolling filters */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Shimmer skeleton animation for image loading */
+@keyframes shimmer-bg {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer-bg {
+  background: linear-gradient(90deg, #18181b 25%, #27272a 50%, #18181b 75%);
+  background-size: 200% 100%;
+  animation: shimmer-bg 1.8s infinite linear;
+}
+
+/* Accent Color Customization Variables */
+:root, [data-accent="purple"] {
+  --accent-color: 168 85 247; /* #a855f7 */
+  --accent-gradient-from: #a855f7;
+  --accent-gradient-to: #ec4899;
+  --accent-glow: rgba(168, 85, 247, 0.35);
+}
+[data-accent="blue"] {
+  --accent-color: 59 130 246; /* #3b82f6 */
+  --accent-gradient-from: #3b82f6;
+  --accent-gradient-to: #06b6d4;
+  --accent-glow: rgba(59, 130, 246, 0.35);
+}
+[data-accent="emerald"] {
+  --accent-color: 16 185 129; /* #10b981 */
+  --accent-gradient-from: #10b981;
+  --accent-gradient-to: #059669;
+  --accent-glow: rgba(16, 185, 129, 0.35);
+}
+[data-accent="amber"] {
+  --accent-color: 245 158 11; /* #f59e0b */
+  --accent-gradient-from: #f59e0b;
+  --accent-gradient-to: #ea580c;
+  --accent-glow: rgba(245, 158, 11, 0.35);
+}
+[data-accent="pink"] {
+  --accent-color: 236 72 153; /* #ec4899 */
+  --accent-gradient-from: #ec4899;
+  --accent-gradient-to: #f43f5e;
+  --accent-glow: rgba(236, 72, 153, 0.35);
+}
+
+.text-theme-accent {
+  color: rgb(var(--accent-color));
+}
+.bg-theme-accent {
+  background-color: rgb(var(--accent-color));
+}
+.border-theme-accent {
+  border-color: rgb(var(--accent-color));
+}
+.bg-theme-gradient {
+  background: linear-gradient(135deg, var(--accent-gradient-from) 0%, var(--accent-gradient-to) 100%);
+}
+
+@keyframes toast-slide-in {
+  from {
+    transform: translateY(20px) scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes particle-fade-1 {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--x), var(--y)) scale(0); opacity: 0; }
+}
+.animate-particle {
+  animation: particle-fade-1 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+
+
 

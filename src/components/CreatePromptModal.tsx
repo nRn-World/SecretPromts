@@ -9,7 +9,7 @@ import { compressImage } from '../firebase/compress';
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:5', '3:4', '2:3', '2:1'];
 
 export const CreatePromptModal: React.FC = () => {
-  const { isCreateModalOpen, setIsCreateModalOpen, addPrompt, categories, isAdmin, isSaving } = usePrompts();
+  const { isCreateModalOpen, setIsCreateModalOpen, addPrompt, categories, isAdmin, isAuthor, isSaving } = usePrompts();
   const { t, categoryLabel } = useLanguage();
 
   const [title, setTitle] = useState('');
@@ -25,7 +25,7 @@ export const CreatePromptModal: React.FC = () => {
   const [saveError, setSaveError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isCreateModalOpen || !isAdmin) return null;
+  if (!isCreateModalOpen || (!isAdmin && !isAuthor)) return null;
 
   const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).slice(0, 3 - images.length);

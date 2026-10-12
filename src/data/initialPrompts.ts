@@ -24,6 +24,8 @@ export interface PromptItem {
   likesCount?: number;
   likedBy?: string[];
   viewCount?: number;
+  copyCount?: number;
+  favoritesCount?: number;
   variables?: PromptVariable[];
   authorId?: string;
   authorName?: string;
@@ -217,7 +219,6 @@ export const MODELS = [
 
 export const CATEGORIES = [
   'Alla',
-  'Porträtt',
   'Landskap & Natur',
   'Arkitektur',
   'Logotyper & Ikoner',
