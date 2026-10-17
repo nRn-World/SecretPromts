@@ -55,7 +55,14 @@ service cloud.firestore {
     match /adminNews/{newsId} {
       allow read: if isSignedIn();
       allow create: if isAdmin();
-      allow update: if isSignedIn();
+      // Admin edits freely. Everyone else may only move the like/dislike counters by at most 1.
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'dislikeCount'])
+          && request.resource.data.likeCount is int
+          && request.resource.data.dislikeCount is int
+          && (request.resource.data.likeCount - resource.data.likeCount) in [-1, 0, 1]
+          && (request.resource.data.dislikeCount - resource.data.dislikeCount) in [-1, 0, 1]);
 
       match /reactions/{uid} {
         allow read: if isSignedIn();
