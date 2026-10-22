@@ -28,8 +28,18 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && request.resource.data.get('isAuthor', false) == false
+        && request.resource.data.get('isBlocked', false) == false;
+      // Admin edits freely. Owners may not touch their own privilege fields (isAuthor, isBlocked, ...).
+      // Others may only touch the social fields (friend requests, friends, notifications).
+      allow update: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['isAuthor', 'authorExpiresAt', 'isBlocked', 'uid', 'email', 'createdAt']))
+        || (isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['friendRequests', 'friends', 'notifications']));
       allow delete: if isAdmin();
     }
 
